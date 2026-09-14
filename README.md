@@ -1,6 +1,6 @@
 # SCO ATLAS Data
 
-This directory contains the data layer of **SCO ATLAS**, an experimentally grounded collection of spin-crossover (SCO) systems represented and analysed with SCOPE. The analysis accompanying the present manuscript focuses on the isolated, gas-phase high-spin (HS) and low-spin (LS) states.
+This directory contains the Data and Analyses associated with the **SCO ATLAS**, a collection of spin-crossover (SCO) systems represented and analysed with SCOPE. The analysis accompanying the present manuscript focuses on the "Isolated" branch, consisting of gas-phase computations for the high-spin (HS) and low-spin (LS) states of those SCO complexes.
 
 ## Requirements
 
@@ -34,20 +34,19 @@ The development-only `old/` directory is not part of the distributed dataset.
 
 ## Local Configuration
 
-The serialized environment records the paths used when the ATLAS was created. Notebook `0-Create_System_Files.ipynb` therefore remaps it to the local data copy. Set the following two paths in its configuration cell:
+The serialized environment records the paths used when the ATLAS was created. Notebook `0-Create_System_Files.ipynb` therefore remaps it to the local data copy. Set the following paths in its configuration cell:
 
 ```python
-from pathlib import Path
-
-data_path = Path("/path/to/Database_SCO/Data").expanduser().resolve()
-env_path = Path("/path/to/Database_SCO/Data/scope_env_atlas.npy").expanduser().resolve()
+data_path     = "/path/to/Database_SCO/Data/"
+env_path      = "/path/to/Database_SCO/Data/scope_env_atlas.npy"
+analysis_path = "/path/to/Database_SCO/Analysis/"
 ```
 
 The notebook checks the SCOPE version and the presence of `1-Sources`, `2-Systems`, `3-Computations`, and the environment file before continuing.
 
 ## Analysis Entry Points
 
-The notebooks under `Analysis/1-Analyse_Database/` operate on selected collections of System objects rather than duplicating those binaries. Notebook 0 prepares CSV indexes such as `finished_systems.csv`, `not_finished_systems.csv`, `unique_systems.csv`, and `filtered_structure_systems.csv` in the project-level `Outputs/` directory.
+The notebooks under `Analysis/Notebooks/` operate on selected collections of System objects rather than duplicating those binaries. Notebook 0 prepares CSV indexes such as `finished_systems.csv`, `not_finished_systems.csv`, `unique_systems.csv`, and `filtered_structure_systems.csv` in `Analysis/Outputs/`.
 
 The `path` fields in newly generated indexes are stored relative to the project root, for example:
 
