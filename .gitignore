@@ -1,3 +1,4 @@
+__pycache__/
 .DS_Store
 .vscode
 .ipynb_checkpoints
@@ -13,7 +14,7 @@ Tests/
 *.npy
 *.zip
 *.tar
+*.tar.gz
 *.xlsx
-*.docx*.tar.gz
-__pycache__/
+*.docx
 *.py[cod]
