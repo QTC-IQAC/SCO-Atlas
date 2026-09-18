@@ -1,19 +1,19 @@
 refcode,path,reason
-ACEYOW,2-Systems/ACEYOW01/ACEYOW01.npy,isolated branch with status active.
-FACGOI,2-Systems/FACGOI/FACGOI.npy,isolated branch with status active.
-FEBPEJ,2-Systems/FEBPEJ/FEBPEJ.npy,Missing HS or LS b3lyp_opt states
-FEYWIR,2-Systems/FEYWIR01/FEYWIR01.npy,Missing HS or LS b3lyp_opt states
-HOLCES,2-Systems/HOLCES/HOLCES.npy,Missing HS or LS b3lyp_opt states
-IRUTEV,2-Systems/IRUTEV/IRUTEV.npy,isolated branch with status active.
-KABXIY,2-Systems/KABXIY/KABXIY.npy,Missing HS or LS b3lyp_opt states
-KAMROJ,2-Systems/KAMROJ/KAMROJ.npy,Missing HS or LS b3lyp_opt states
-KEBMEK,2-Systems/KEBMEK/KEBMEK.npy,Missing HS or LS b3lyp_opt states
-LUWPAU,2-Systems/LUWPAU/LUWPAU.npy,isolated branch with status active.
-MAFBAA,2-Systems/MAFBAA/MAFBAA.npy,Missing HS or LS b3lyp_opt states
-MAFBEE,2-Systems/MAFBEE/MAFBEE.npy,Missing HS or LS b3lyp_opt states
-MAFCIJ,2-Systems/MAFCIJ/MAFCIJ.npy,Missing HS or LS b3lyp_opt states
-NASTOS,2-Systems/NASTOS02/NASTOS02.npy,Missing HS or LS b3lyp_opt states
-QIDLUL,2-Systems/QIDLUL/QIDLUL.npy,Missing HS or LS b3lyp_opt states
-TELWEO,2-Systems/TELWEO/TELWEO.npy,isolated branch with status active.
-WEXVON,2-Systems/WEXVON/WEXVON.npy,isolated branch with status active.
-ZEQRAO,2-Systems/ZEQRAO/ZEQRAO.npy,isolated branch with status active.
+ACEYOW,2-Systems/ACEYOW01/ACEYOW01.npy,Missing valid HS or LS optimized minimum
+FACGOI,2-Systems/FACGOI/FACGOI.npy,Missing valid HS or LS optimized minimum
+FEBPEJ,2-Systems/FEBPEJ/FEBPEJ.npy,Missing valid HS or LS optimized minimum
+FEYWIR,2-Systems/FEYWIR01/FEYWIR01.npy,Missing valid HS or LS optimized minimum
+HOLCES,2-Systems/HOLCES/HOLCES.npy,Missing valid HS or LS optimized minimum
+IRUTEV,2-Systems/IRUTEV/IRUTEV.npy,Missing valid HS or LS optimized minimum
+KABXIY,2-Systems/KABXIY/KABXIY.npy,Missing valid HS or LS optimized minimum
+KAMROJ,2-Systems/KAMROJ/KAMROJ.npy,Missing valid HS or LS optimized minimum
+KEBMEK,2-Systems/KEBMEK/KEBMEK.npy,Missing valid HS or LS optimized minimum
+LUWPAU,2-Systems/LUWPAU/LUWPAU.npy,Missing valid HS or LS optimized minimum
+MAFBAA,2-Systems/MAFBAA/MAFBAA.npy,Missing valid HS or LS optimized minimum
+MAFBEE,2-Systems/MAFBEE/MAFBEE.npy,Missing valid HS or LS optimized minimum
+MAFCIJ,2-Systems/MAFCIJ/MAFCIJ.npy,Missing valid HS or LS optimized minimum
+NASTOS,2-Systems/NASTOS02/NASTOS02.npy,Missing valid HS or LS optimized minimum
+QIDLUL,2-Systems/QIDLUL/QIDLUL.npy,Missing valid HS or LS optimized minimum
+TELWEO,2-Systems/TELWEO/TELWEO.npy,Missing valid HS or LS optimized minimum
+WEXVON,2-Systems/WEXVON/WEXVON.npy,Missing valid HS or LS optimized minimum
+ZEQRAO,2-Systems/ZEQRAO/ZEQRAO.npy,Missing valid HS or LS optimized minimum

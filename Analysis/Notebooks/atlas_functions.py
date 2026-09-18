@@ -15,7 +15,6 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
 from matplotlib.ticker import MaxNLocator
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Draw, rdMolDescriptors
-from scope.elementdata import ElementData
 from scope.operations.graphs import compute_topological_distances
 from scope.thermodynamics import get_Hvib, get_Svib
 
@@ -114,20 +113,35 @@ def sanitize_filename(text):
     return re.sub(r'_+', '_', text).strip('._-')
 
 #################################
-#### Vibrational Analysis #######
+#### Optimized State Selection ##
 #################################
-def get_hs_ls_b3lyp_states(system):
+def find_optimized_minimum(source):
+    """Return the valid optimized minimum, preferring b3lyp_opt over corr_opt."""
+    found, state = source.find_state('b3lyp_opt')
+    if found and state.check_minimum():
+        return True, state
+
+    found, state = source.find_state('corr_opt')
+    if found and state.check_minimum():
+        return True, state
+
+    return False, None
+
+def get_hs_ls_minimum_states(system):
     found_hs, hs_mol = system.find_source('ref_hs_mol')
     found_ls, ls_mol = system.find_source('ref_ls_mol')
     if not (found_hs and found_ls):
         raise ValueError('Missing HS or LS reference molecule')
 
-    found_hs_state, hs_state = hs_mol.find_state('b3lyp_opt')
-    found_ls_state, ls_state = ls_mol.find_state('b3lyp_opt')
+    found_hs_state, hs_state = find_optimized_minimum(hs_mol)
+    found_ls_state, ls_state = find_optimized_minimum(ls_mol)
     if not (found_hs_state and found_ls_state):
-        raise ValueError('Missing HS or LS b3lyp_opt state')
+        raise ValueError('Missing valid HS or LS optimized minimum')
     return hs_state, ls_state
 
+#################################
+#### Vibrational Analysis #######
+#################################
 def binned_vibrational_values(freqs_cm, temperature, freq_bins_cm):
     freqs_cm = np.asarray(freqs_cm, dtype=float)
     abs_freqs_cm = np.abs(freqs_cm)
@@ -170,7 +184,7 @@ def build_vibrational_bin_rows(
         refcode = system.refcode_wo_digits
         try:
             thermo_row = thermo_by_refcode[refcode]
-            hs_state, ls_state = get_hs_ls_b3lyp_states(system)
+            hs_state, ls_state = get_hs_ls_minimum_states(system)
             hs_entropy, hs_enthalpy, hs_mode_counts, hs_mode_fractions, hs_entropy_per_mode = binned_vibrational_values(
                 hs_state.freqs_cm, temperature, freq_bins_cm
             )
@@ -183,6 +197,8 @@ def build_vibrational_bin_rows(
                     'refcode': refcode,
                     'denticity': thermo_row['denticity'],
                     'homoleptic': thermo_row['homoleptic'] == 'True',
+                    'HS_minimum_state': hs_state.name,
+                    'LS_minimum_state': ls_state.name,
                     'temperature[K]': temperature,
                     'entropy_method': entropy_method,
                     'enthalpy_method': enthalpy_method,
@@ -2297,353 +2313,6 @@ def summarize_core_families(records):
         }
         for record in records
     ]
-
-#####################
-#### BCE Screening ###
-#####################
-def csv_boolean(value):
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in ('true', '1', 'yes')
-
-def molecule_total_charge(molecule):
-    for attribute in ('total_charge', 'charge'):
-        value = getattr(molecule, attribute, None)
-        if value is not None:
-            return int(round(float(value)))
-    return None
-
-def build_bce_screening_rows(systems, thermodynamic_rows, structural_rows, temperature=298.15):
-    """Combine stored ATLAS results into molecular BCE screening descriptors."""
-    thermodynamic_by_refcode = {
-        base_refcode(row.get('refcode', row.get('id'))): row
-        for row in thermodynamic_rows
-    }
-    structural_by_refcode = {
-        base_refcode(row.get('refcode', row.get('id'))): row
-        for row in structural_rows
-    }
-    element_data = ElementData()
-    screening_rows = []
-    failures = []
-
-    for system in systems:
-        refcode = base_refcode(system.refcode)
-        try:
-            thermodynamic = thermodynamic_by_refcode[refcode]
-            structural = structural_by_refcode[refcode]
-            hs_state, _ = get_hs_ls_b3lyp_states(system)
-            found_hs, hs_molecule = system.find_source('ref_hs_mol')
-            if not found_hs:
-                raise ValueError('Missing HS reference molecule')
-
-            dsvib_t = first_float(thermodynamic['dSvib·T[kJ/mol](T=298K)'])
-            dselec_t = first_float(thermodynamic['dSelec·T[kJ/mol](T=298K)'])
-            hs_volume = first_float(structural['HS_CH_volume'])
-            ls_volume = first_float(structural['LS_CH_volume'])
-            if None in (dsvib_t, dselec_t, hs_volume, ls_volume):
-                raise ValueError('Missing entropy or convex-hull data')
-
-            molecular_weight = sum(
-                element_data.elementweight[label]
-                for label in hs_state.labels
-            )
-            dsvib = 1000.0 * dsvib_t / temperature
-            dselec = 1000.0 * dselec_t / temperature
-            dstotal = dsvib + dselec
-            d_volume_a3 = hs_volume - ls_volume
-            d_volume_cm3mol = d_volume_a3 * 0.602214076
-            d_volume_cm3g = d_volume_cm3mol / molecular_weight
-            total_charge = molecule_total_charge(hs_molecule)
-
-            screening_rows.append({
-                'refcode': refcode,
-                'path': thermodynamic['path'],
-                'denticity': str(thermodynamic['denticity']),
-                'homoleptic': csv_boolean(thermodynamic['homoleptic']),
-                'total_charge': total_charge,
-                'charged': total_charge not in (None, 0),
-                'dHelec_kJmol': first_float(thermodynamic['dHelec[kJ/mol]']),
-                'dHvib_298_kJmol': first_float(thermodynamic['dHvib[kJ/mol](T=298K)']),
-                'dSvibT_298_kJmol': dsvib_t,
-                'dSvib_298_JmolK': dsvib,
-                'dSelec_298_JmolK': dselec,
-                'dStotal_298_JmolK': dstotal,
-                'molecular_weight_gmol': molecular_weight,
-                'dSvib_mass_JkgK': 1000.0 * dsvib / molecular_weight,
-                'dStotal_mass_JkgK': 1000.0 * dstotal / molecular_weight,
-                'T12_K': first_float(thermodynamic['T12[K]']),
-                'HS_hull_volume_A3': hs_volume,
-                'LS_hull_volume_A3': ls_volume,
-                'dV_hull_A3': d_volume_a3,
-                'dV_hull_cm3mol': d_volume_cm3mol,
-                'dV_hull_cm3g': d_volume_cm3g,
-                'BCE_metric_molar': dstotal * max(d_volume_cm3mol, 0.0),
-                'BCE_metric_mass': (
-                    1000.0 * dstotal / molecular_weight
-                    * max(d_volume_cm3g, 0.0)
-                ),
-            })
-        except Exception as error:
-            failures.append({'refcode': refcode, 'reason': str(error)})
-
-    return screening_rows, failures
-
-def bce_screening_columns():
-    return {
-        'refcode': 'refcode',
-        'path': 'path',
-        'denticity': 'denticity',
-        'homoleptic': 'homoleptic',
-        'total_charge': 'total_charge',
-        'charged': 'charged',
-        'dHelec_kJmol': 'dHelec[kJ·mol-1]',
-        'dHvib_298_kJmol': 'dHvib_298K[kJ·mol-1]',
-        'dSvibT_298_kJmol': 'dSvibT_298K[kJ·mol-1]',
-        'dSvib_298_JmolK': 'dSvib_298K[J·mol-1·K-1]',
-        'dSelec_298_JmolK': 'dSelec_298K[J·mol-1·K-1]',
-        'dStotal_298_JmolK': 'dStotal_298K[J·mol-1·K-1]',
-        'molecular_weight_gmol': 'molecular_weight[g·mol-1]',
-        'dSvib_mass_JkgK': 'dSvib_mass_298K[J·kg-1·K-1]',
-        'dStotal_mass_JkgK': 'dStotal_mass_298K[J·kg-1·K-1]',
-        'T12_K': 'T12[K]',
-        'HS_hull_volume_A3': 'HS_hull_volume[A3]',
-        'LS_hull_volume_A3': 'LS_hull_volume[A3]',
-        'dV_hull_A3': 'dV_hull[A3]',
-        'dV_hull_cm3mol': 'dV_hull[cm3·mol-1]',
-        'dV_hull_cm3g': 'dV_hull[cm3·g-1]',
-        'BCE_metric_molar': 'BCE_metric[J·cm3·mol-2·K-1]',
-        'BCE_metric_mass': 'BCE_metric[J·cm3·kg-1·g-1·K-1]',
-    }
-
-def write_bce_screening_rows(path, rows):
-    columns = bce_screening_columns()
-    exported_rows = [
-        {output_name: row.get(name) for name, output_name in columns.items()}
-        for row in rows
-    ]
-    write_csv_rows(path, exported_rows, list(columns.values()))
-
-def write_bce_candidates_latex(path, rows, maximum_rows=40):
-    header = (
-        'Refcode & Dent. & Homo. & Charged & '
-        '\\shortstack{MW \\\\[1pt] [g mol$^{-1}$]} & '
-        '\\shortstack{$\\Delta S_{\\mathrm{tot,m}}^{298}$ \\\\[1pt] [J kg$^{-1}$ K$^{-1}$]} & '
-        '\\shortstack{$\\Delta V_{\\mathrm{CH,m}}$ \\\\[1pt] [cm$^3$ g$^{-1}$]} & '
-        '$\\Pi_{\\mathrm{BCE}}$ & \\shortstack{$T_{1/2}$ \\\\[1pt] [K]} \\\\'
-    )
-    lines = [
-        '\\begin{scriptsize}',
-        '\\begin{longtable}{l c c c r r r r r}',
-        '\\caption{Top 40 SCO ATLAS candidates ranked by the mass-specific molecular BCE metric.}\\label{tab:bce_top40_candidates}\\\\',
-        '\\toprule',
-        header,
-        '\\midrule',
-        '\\endfirsthead',
-        '\\toprule',
-        header,
-        '\\midrule',
-        '\\endhead',
-        '\\midrule',
-        '\\multicolumn{9}{r}{Continued on next page} \\\\',
-        '\\midrule',
-        '\\endfoot',
-        '\\bottomrule',
-        '\\endlastfoot',
-    ]
-
-    for row in rows[:maximum_rows]:
-        t12 = '-' if row.get('T12_K') is None else f"{row['T12_K']:.0f}"
-        lines.append(
-            f"{row['refcode']} & {row['denticity']} & {row['homoleptic']} & {row['charged']} & "
-            f"{row['molecular_weight_gmol']:.2f} & {row['dStotal_mass_JkgK']:.2f} & "
-            f"{row['dV_hull_cm3g']:.3f} & {row['BCE_metric_mass']:.2f} & {t12} \\\\"
-        )
-
-    lines.extend(['\\end{longtable}', '\\end{scriptsize}'])
-    with open(path, 'w') as output:
-        output.write('\n'.join(lines) + '\n')
-
-def read_bce_screening_rows(path):
-    columns = bce_screening_columns()
-    reverse_columns = {output_name: name for name, output_name in columns.items()}
-    boolean_columns = {'homoleptic', 'charged'}
-    text_columns = {'refcode', 'path', 'denticity'}
-    rows = []
-
-    for input_row in read_csv(path):
-        row = {}
-        for output_name, value in input_row.items():
-            name = reverse_columns.get(output_name)
-            if name is None:
-                continue
-            if name in boolean_columns:
-                row[name] = csv_boolean(value)
-            elif name in text_columns:
-                row[name] = value
-            else:
-                row[name] = first_float(value)
-        rows.append(row)
-    return rows
-
-def display_data_table(rows, columns, labels=None, digits=2, maximum_rows=None):
-    labels = labels or {}
-    displayed_rows = rows if maximum_rows is None else rows[:maximum_rows]
-
-    def format_entry(value):
-        if value is None:
-            return '-'
-        if isinstance(value, float):
-            return f'{value:.{digits}f}'
-        return str(value)
-
-    header = ''.join(f'<th>{escape(labels.get(column, column))}</th>' for column in columns)
-    body = ''.join(
-        '<tr>' + ''.join(
-            f'<td>{escape(format_entry(row.get(column)))}</td>'
-            for column in columns
-        ) + '</tr>'
-        for row in displayed_rows
-    )
-    display(HTML(
-        '<div style="overflow-x:auto">'
-        '<table style="border-collapse:collapse">'
-        f'<thead><tr>{header}</tr></thead><tbody>{body}</tbody>'
-        '</table></div>'
-        '<style>th,td{padding:4px 8px;border-bottom:1px solid #ddd;white-space:nowrap}'
-        'th{text-align:left;border-bottom:2px solid #555}</style>'
-    ))
-
-def plot_bce_screening(
-    rows,
-    output_path=None,
-    denticities=('1', '2', '3', '6'),
-    number_labels=12,
-    x_limits=(0.015, 0.07),
-    y_limits=(120, 350),
-    label_offsets=None,
-):
-    label_offsets = label_offsets or {}
-    colors = {'1': 'tab:purple', '2': 'tab:green', '3': 'tab:blue', '6': 'tab:orange', 'other': 'pink'}
-    plot_rows = [
-        dict(row, plot_denticity=str(row['denticity']) if row['homoleptic'] else 'other')
-        for row in rows
-        if row.get('dV_hull_cm3g') is not None and row.get('dStotal_mass_JkgK') is not None
-    ]
-    plot_order = [
-        denticity for denticity in (*denticities, 'other')
-        if any(row['plot_denticity'] == denticity for row in plot_rows)
-    ]
-
-    fig, ax = plt.subplots(figsize=(7.4, 4.8), tight_layout=True)
-    for denticity in plot_order:
-        subset = [row for row in plot_rows if row['plot_denticity'] == denticity]
-        ax.scatter(
-            [row['dV_hull_cm3g'] for row in subset],
-            [row['dStotal_mass_JkgK'] for row in subset],
-            label='other' if denticity == 'other' else f'd={denticity}',
-            color=colors.get(denticity, '0.7'),
-            edgecolor='white',
-            linewidth=0.4,
-            alpha=0.70,
-            s=45,
-        )
-
-    labelled_rows = sorted(
-        plot_rows,
-        key=lambda row: row.get('BCE_metric_mass') or -math.inf,
-        reverse=True,
-    )[:number_labels]
-    default_label_offsets = [(5, 8), (8, -10), (-14, 9), (12, -11), (-16, 9), (14, -10)]
-    for label, row in enumerate(labelled_rows, start=1):
-        color = colors.get(row['plot_denticity'], '0.7')
-        ax.scatter(
-            row['dV_hull_cm3g'], row['dStotal_mass_JkgK'],
-            color=color, edgecolor='black', linewidth=0.7, s=105, zorder=4,
-        )
-        default_offset = default_label_offsets[(label - 1) % len(default_label_offsets)]
-        horizontal_offset, vertical_offset = label_offsets.get(row['refcode'], default_offset)
-        ax.annotate(
-            str(label),
-            (row['dV_hull_cm3g'], row['dStotal_mass_JkgK']),
-            xytext=(horizontal_offset, vertical_offset), textcoords='offset points',
-            ha='left' if horizontal_offset > 0 else 'right',
-            va='bottom' if vertical_offset > 0 else 'top',
-            fontsize=8, fontweight='bold', color='black', zorder=5,
-        )
-
-    if labelled_rows:
-        ax.text(1.03, 0.62, 'Refcodes', transform=ax.transAxes, ha='left', va='top', fontsize=9, fontweight='bold')
-        for label, row in enumerate(labelled_rows, start=1):
-            y_position = 0.62 - (label + 0.15) * 0.045
-            ax.text(1.03, y_position, str(label), transform=ax.transAxes, ha='left', va='top', fontsize=9, fontweight='bold')
-            ax.text(1.085, y_position, row['refcode'], transform=ax.transAxes, ha='left', va='top', fontsize=9)
-
-    ax.set_xlim(*x_limits)
-    ax.set_ylim(*y_limits)
-    ax.set_xlabel(r'$\Delta V_{\mathrm{CH,m}}$ [cm$^3$ g$^{-1}$]')
-    ax.set_ylabel(r'$\Delta S_{\mathrm{tot,m}}^{298}$ [J kg$^{-1}$ K$^{-1}$]')
-    ax.legend(title='Denticity:', loc='upper left', bbox_to_anchor=(1.0, 1.0), frameon=False, fontsize=9, title_fontsize=10)
-    ax.grid(alpha=0.22)
-    for spine in ax.spines.values():
-        spine.set_visible(True)
-        spine.set_color('black')
-        spine.set_linewidth(1.0)
-
-    if output_path:
-        fig.savefig(output_path, dpi=400, bbox_inches='tight')
-    plt.show()
-    return fig, ax
-
-def summarize_bce_by_denticity(rows, mass_specific=True, denticities=('1', '2', '3', '6')):
-    entropy_key = 'dStotal_mass_JkgK' if mass_specific else 'dStotal_298_JmolK'
-    volume_key = 'dV_hull_cm3g' if mass_specific else 'dV_hull_cm3mol'
-    groups = {denticity: [] for denticity in (*denticities, 'other')}
-
-    for row in rows:
-        group = str(row['denticity']) if row['homoleptic'] else 'other'
-        if group in groups and row.get(entropy_key) is not None and row.get(volume_key) is not None:
-            groups[group].append(row)
-
-    summary = []
-    for group, entries in groups.items():
-        if not entries:
-            continue
-        summary.append({
-            'denticity': group,
-            'label': 'heteroleptic' if group == 'other' else f'd={group}',
-            'mean_entropy': float(np.mean([row[entropy_key] for row in entries])),
-            'mean_volume': float(np.mean([row[volume_key] for row in entries])),
-            'num_entries': len(entries),
-        })
-    return summary
-
-def plot_bce_denticity_averages(summary, mass_specific=True, output_path=None):
-    colors = {'1': 'tab:purple', '2': 'tab:green', '3': 'tab:blue', '6': 'tab:orange', 'other': 'pink'}
-    positions = np.arange(len(summary))
-    labels = [row['label'] for row in summary]
-    bar_colors = [colors.get(row['denticity'], '0.7') for row in summary]
-    entropy_unit = r'J kg$^{-1}$ K$^{-1}$' if mass_specific else r'J mol$^{-1}$ K$^{-1}$'
-    volume_unit = r'cm$^3$ g$^{-1}$' if mass_specific else r'cm$^3$ mol$^{-1}$'
-
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.4), tight_layout=True)
-    axes[0].bar(positions, [row['mean_entropy'] for row in summary], color=bar_colors, edgecolor='black', linewidth=0.8)
-    axes[0].set_ylabel(r'Mean $\Delta S_{\mathrm{tot}}(298\ \mathrm{K})$ [' + entropy_unit + ']')
-    axes[1].bar(positions, [row['mean_volume'] for row in summary], color=bar_colors, edgecolor='black', linewidth=0.8)
-    axes[1].set_ylabel(r'Mean $\Delta V_{\mathrm{CH}}$ [' + volume_unit + ']')
-
-    for ax in axes:
-        ax.set_xticks(positions, labels, rotation=35, ha='right')
-        ax.grid(axis='y', alpha=0.25)
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_color('black')
-            spine.set_linewidth(1.0)
-
-    if output_path:
-        fig.savefig(output_path, dpi=400)
-    plt.show()
-    return fig, axes
 
 ###############
 #### Other ####
