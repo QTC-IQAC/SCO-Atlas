@@ -3,7 +3,9 @@ import json
 import math
 import os
 import re
+from ast import literal_eval
 from collections import Counter, deque
+from copy import deepcopy
 from html import escape
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
 from matplotlib.ticker import MaxNLocator
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Draw, rdMolDescriptors
+from scope.classes_data import Data
 from scope.operations.graphs import compute_topological_distances
 from scope.thermodynamics import get_Hvib, get_Svib
 
@@ -142,6 +145,320 @@ def get_hs_ls_minimum_states(system):
 #################################
 #### Vibrational Analysis #######
 #################################
+def assess_vnm_mapping(mappings: list) -> dict:
+    """Summarize the quality of a complete VNM mapping."""
+    if len(mappings) == 0:
+        raise ValueError('ASSESS_VNM_MAPPING: Mapping cannot be empty')
+
+    overlaps              = np.asarray([mapping['overlap'] for mapping in mappings], dtype=float)
+    frequency_differences = np.asarray([mapping['frequency_difference'] for mapping in mappings], dtype=float)
+    costs                 = np.asarray([mapping['cost'] for mapping in mappings], dtype=float)
+
+    return {
+        'mapping_quality': float(np.exp(-np.mean(costs))),
+        'mean_cost': float(np.mean(costs)),
+        'mean_overlap': float(np.mean(overlaps)),
+        'mean_squared_overlap': float(np.mean(overlaps**2)),
+        'median_overlap': float(np.median(overlaps)),
+        'minimum_overlap': float(np.min(overlaps)),
+        'overlap_10th_percentile': float(np.percentile(overlaps, 10)),
+        'fraction_overlap_above_0.8': float(np.mean(overlaps >= 0.8)),
+        'fraction_overlap_above_0.5': float(np.mean(overlaps >= 0.5)),
+        'frequency_mae': float(np.mean(frequency_differences)),
+        'frequency_rmse': float(np.sqrt(np.mean(frequency_differences**2))),
+        'maximum_frequency_difference': float(np.max(frequency_differences)),
+    }
+
+def get_fcs_internal_basis(coords, masses):
+    """Return an orthonormal basis for internal motion of an atomic group."""
+    coords = np.asarray(coords, dtype=float)
+    masses = np.asarray(masses, dtype=float)
+    if coords.ndim != 2 or coords.shape[1] != 3:
+        raise ValueError('GET_FCS_INTERNAL_BASIS: Coordinates must have shape (natoms, 3)')
+    if masses.shape != (len(coords),):
+        raise ValueError('GET_FCS_INTERNAL_BASIS: Masses must match the coordinates')
+
+    sqrt_masses = np.sqrt(masses)
+    center_of_mass = np.average(coords, axis=0, weights=masses)
+    centered_coords = coords - center_of_mass
+
+    rigid_vectors = []
+    for axis in np.eye(3):
+        rigid_vectors.append((sqrt_masses[:, None] * axis).reshape(-1))
+    for axis in np.eye(3):
+        rotation = np.cross(axis, centered_coords)
+        rigid_vectors.append((sqrt_masses[:, None] * rotation).reshape(-1))
+
+    rigid_vectors = np.asarray(rigid_vectors).T
+    left_vectors, singular_values, _ = np.linalg.svd(rigid_vectors, full_matrices=True)
+    tolerance = max(rigid_vectors.shape) * np.finfo(float).eps * singular_values[0]
+    rigid_rank = np.count_nonzero(singular_values > tolerance)
+    if rigid_rank != 6:
+        raise ValueError(f'GET_FCS_INTERNAL_BASIS: Expected six rigid directions, found {rigid_rank}')
+    return left_vectors[:, rigid_rank:]
+
+def project_vnms_on_fcs(vnms, coords, fcs_indices):
+    """Project normalized molecular VNMs onto all and internal FCS motion."""
+    if not vnms:
+        raise ValueError('PROJECT_VNMS_ON_FCS: No VNMs were provided')
+
+    fcs_indices = np.asarray(fcs_indices, dtype=int)
+    masses = np.asarray(vnms[0].masses, dtype=float)[fcs_indices]
+    internal_basis = get_fcs_internal_basis(np.asarray(coords)[fcs_indices], masses)
+    fcs_weights = []
+    internal_weights = []
+
+    for vnm in vnms:
+        mode = vnm.mass_weight_mode(permanent=False)
+        norm = np.linalg.norm(mode)
+        if not np.isfinite(norm) or norm <= 0.0:
+            raise ValueError('PROJECT_VNMS_ON_FCS: VNM has an invalid norm')
+        fcs_mode = (mode / norm)[fcs_indices].reshape(-1)
+        coefficients = internal_basis.T @ fcs_mode
+        fcs_weights.append(np.sum(fcs_mode**2))
+        internal_weights.append(np.sum(coefficients**2))
+
+    return np.asarray(fcs_weights), np.asarray(internal_weights), internal_basis
+
+def get_mode_entropies(vnms, temperature):
+    """Return one harmonic vibrational-entropy contribution per VNM."""
+    entropies = []
+    for vnm in vnms:
+        entropy = get_Svib([vnm.freq_cm], temperature, freq_units='cm', outunits='kj')
+        entropies.append(entropy.value * 1000.0)
+    return np.asarray(entropies)
+
+def get_mode_enthalpies(vnms, temperature):
+    """Return one harmonic vibrational-enthalpy contribution per VNM."""
+    enthalpies = []
+    for vnm in vnms:
+        enthalpy = get_Hvib([vnm.freq_cm], temperature, freq_units='cm', outunits='kj')
+        enthalpies.append(enthalpy.value)
+    return np.asarray(enthalpies)
+
+def get_ligand_metal_weights(vnms, ligand_indices, metal_index):
+    """Partition each VNM's atomic participation among ligands and the metal."""
+    ligand_weights = []
+    metal_weights = []
+
+    for vnm in vnms:
+        atomic_participation = vnm.get_atomic_participation()
+        this_ligand_weights = []
+        for indices in ligand_indices:
+            this_ligand_weights.append(np.sum(atomic_participation[indices]))
+        ligand_weights.append(this_ligand_weights)
+        metal_weights.append(atomic_participation[metal_index])
+
+    return np.asarray(ligand_weights), np.asarray(metal_weights)
+
+def bin_mode_contributions(frequencies, contributions, frequency_bins):
+    """Sum mode-resolved values inside frequency windows."""
+    return np.histogram(frequencies, bins=frequency_bins, weights=contributions)[0]
+
+def get_weighted_frequency_metrics(hs_vnms, ls_vnms, hs_weights, ls_weights):
+    """Return pair-weighted state means and their mapped HS-minus-LS shift."""
+    hs_frequencies = np.asarray([vnm.freq_cm for vnm in hs_vnms], dtype=float)
+    ls_frequencies = np.asarray([vnm.freq_cm for vnm in ls_vnms], dtype=float)
+    hs_weights = np.asarray(hs_weights, dtype=float)
+    ls_weights = np.asarray(ls_weights, dtype=float)
+
+    if not (hs_frequencies.shape == ls_frequencies.shape == hs_weights.shape == ls_weights.shape):
+        raise ValueError('GET_WEIGHTED_FREQUENCY_METRICS: Frequencies and weights must have equal shapes')
+
+    valid = (
+        np.isfinite(hs_frequencies)
+        & np.isfinite(ls_frequencies)
+        & np.isfinite(hs_weights)
+        & np.isfinite(ls_weights)
+        & (hs_frequencies > 0.0)
+        & (ls_frequencies > 0.0)
+    )
+    if not np.any(valid):
+        raise ValueError('GET_WEIGHTED_FREQUENCY_METRICS: No positive mapped mode pairs were found')
+
+    hs_frequencies = hs_frequencies[valid]
+    ls_frequencies = ls_frequencies[valid]
+    hs_weights = hs_weights[valid]
+    ls_weights = ls_weights[valid]
+    pair_weights = 0.5 * (hs_weights + ls_weights)
+
+    if np.sum(hs_weights) <= 0.0 or np.sum(ls_weights) <= 0.0 or np.sum(pair_weights) <= 0.0:
+        raise ValueError('GET_WEIGHTED_FREQUENCY_METRICS: Participation weights must have a positive sum')
+
+    hs_mean_frequency = float(np.average(hs_frequencies, weights=pair_weights))
+    ls_mean_frequency = float(np.average(ls_frequencies, weights=pair_weights))
+    return {
+        'HS_mean_frequency': hs_mean_frequency,
+        'LS_mean_frequency': ls_mean_frequency,
+        'dnu_mapped': hs_mean_frequency - ls_mean_frequency,
+        'num_mode_pairs': int(np.count_nonzero(valid)),
+    }
+
+def get_atomic_frequency_shifts(hs_vnms, ls_vnms):
+    """Return the participation-weighted mapped HS-minus-LS shift for each atom."""
+    if len(hs_vnms) != len(ls_vnms) or len(hs_vnms) == 0:
+        raise ValueError('GET_ATOMIC_FREQUENCY_SHIFTS: Mapped VNM sets must have equal nonzero lengths')
+
+    hs_frequencies = np.asarray([vnm.freq_cm for vnm in hs_vnms], dtype=float)
+    ls_frequencies = np.asarray([vnm.freq_cm for vnm in ls_vnms], dtype=float)
+    hs_participation = np.asarray([vnm.get_atomic_participation() for vnm in hs_vnms])
+    ls_participation = np.asarray([vnm.get_atomic_participation() for vnm in ls_vnms])
+
+    if hs_participation.shape != ls_participation.shape:
+        raise ValueError('GET_ATOMIC_FREQUENCY_SHIFTS: Atomic participation arrays must have equal shapes')
+    if hs_participation.ndim != 2 or hs_participation.shape[0] != len(hs_frequencies):
+        raise ValueError('GET_ATOMIC_FREQUENCY_SHIFTS: Expected one atom-participation row per VNM')
+
+    valid = (
+        np.isfinite(hs_frequencies)
+        & np.isfinite(ls_frequencies)
+        & (hs_frequencies > 0.0)
+        & (ls_frequencies > 0.0)
+    )
+    if not np.any(valid):
+        raise ValueError('GET_ATOMIC_FREQUENCY_SHIFTS: No positive mapped mode pairs were found')
+
+    pair_participation = 0.5 * (hs_participation[valid] + ls_participation[valid])
+    frequency_shifts = hs_frequencies[valid] - ls_frequencies[valid]
+    total_participation = np.sum(pair_participation, axis=0)
+    weighted_shifts = np.sum(pair_participation * frequency_shifts[:, None], axis=0)
+
+    return np.divide(
+        weighted_shifts,
+        total_participation,
+        out=np.full(total_participation.shape, np.nan),
+        where=total_participation > 0.0,
+    )
+
+def plot_representative_frequency_shifts(rows, output_path=None):
+    """Compare ligand-, FCS-, and Fe-weighted shifts for representative systems."""
+    components = [
+        ('All ligands', 'dnu_all_ligands[cm-1]'),
+        ('FCS', 'dnu_FCS[cm-1]'),
+        ('Fe atom', 'dnu_metal[cm-1]'),
+    ]
+    colors = ['#d95f02', '#1b9e77']
+    y_positions = np.arange(len(components))
+    bar_height = 0.34
+    fig, ax = plt.subplots(figsize=(6.4, 3.0), tight_layout=True)
+
+    for index, (row, color) in enumerate(zip(rows, colors)):
+        shifts = [float(row[column]) for _, column in components]
+        offset = (index - (len(rows) - 1) / 2) * bar_height
+        ax.barh(
+            y_positions + offset,
+            shifts,
+            height=0.9 * bar_height,
+            color=color,
+            edgecolor='black',
+            linewidth=0.6,
+            label=f"{row['refcode']} ({row['group']})",
+        )
+
+    ax.set_yticks(y_positions, [label for label, _ in components])
+    ax.set_xlabel(r'$\Delta\bar{\nu}_G$ [cm$^{-1}$]')
+    ax.axvline(0.0, color='black', linewidth=0.9)
+    ax.grid(axis='x', alpha=0.25)
+    ax.legend(
+        frameon=False,
+        loc='lower center',
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=len(rows),
+    )
+    ax.invert_yaxis()
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color('black')
+        spine.set_linewidth(1.0)
+
+    if output_path:
+        fig.savefig(output_path, dpi=400, bbox_inches='tight')
+    plt.show()
+    return fig, ax
+
+def plot_vnm_mapping_summary(rows, output_path=None):
+    """Plot compact distributions of the principal VNM-mapping metrics."""
+    metrics = [
+        ('mapping_quality', 'Mapping quality'),
+        ('mean_overlap', 'Mean mode overlap'),
+        ('frequency_mae', r'Mean $|\Delta\nu|$ [cm$^{-1}$]'),
+    ]
+    fig, axs = plt.subplots(1, len(metrics), figsize=(10, 3.0), tight_layout=True)
+
+    for ax, (column, label) in zip(axs, metrics):
+        values = np.asarray([
+            float(row[column]) for row in rows
+            if row.get(column, '') not in ('', None) and np.isfinite(float(row[column]))
+        ])
+        if not len(values):
+            raise ValueError(f'PLOT_VNM_MAPPING_SUMMARY: No values found for {column}')
+        num_bins = min(25, max(8, int(np.sqrt(len(values)))))
+        median = np.median(values)
+        ax.hist(values, bins=num_bins, color='#547f86', edgecolor='black', linewidth=0.5)
+        ax.axvline(median, color='#b43c2f', linestyle='--', linewidth=1.3, label=f'Median: {median:.2f}')
+        ax.set_xlabel(label)
+        ax.set_ylabel('Systems')
+        ax.legend(frameon=False, fontsize=8)
+
+    if output_path:
+        fig.savefig(output_path, dpi=400, bbox_inches='tight')
+    plt.show()
+    return fig, axs
+
+def plot_binned_vnm_group_contributions(
+    values_by_metric,
+    group_labels,
+    bin_labels,
+    contribution_label,
+    output_path=None,
+    show_titles=True,
+):
+    """Plot mean frequency-binned VNM contributions for chemical groups."""
+    metrics = list(values_by_metric)
+    num_columns = 2
+    num_rows = int(np.ceil(len(metrics) / num_columns))
+    fig, axs = plt.subplots(num_rows, num_columns, figsize=(10, 3.1 * num_rows), constrained_layout=True)
+    axs = np.asarray(axs).reshape(-1)
+    colors = colormaps.get_cmap('turbo')(np.linspace(0.05, 0.95, len(bin_labels)))
+    y_positions = np.arange(len(group_labels))
+
+    for ax, metric in zip(axs, metrics):
+        values = np.nan_to_num(np.asarray(values_by_metric[metric], dtype=float), nan=0.0)
+        left_positive = np.zeros(len(group_labels))
+        left_negative = np.zeros(len(group_labels))
+
+        for bin_index, (bin_label, color) in enumerate(zip(bin_labels, colors)):
+            positive = np.where(values[:, bin_index] > 0, values[:, bin_index], 0.0)
+            negative = np.where(values[:, bin_index] < 0, values[:, bin_index], 0.0)
+            ax.barh(y_positions, positive, left=left_positive, color=color, edgecolor='white', linewidth=0.5, label=bin_label)
+            ax.barh(y_positions, negative, left=left_negative, color=color, edgecolor='white', linewidth=0.5)
+            left_positive += positive
+            left_negative += negative
+
+        ax.set_yticks(y_positions, group_labels)
+        ax.set_xlabel(contribution_label)
+        if show_titles:
+            ax.set_title(metric)
+        ax.axvline(0, color='black', linewidth=0.8)
+        ax.grid(axis='x', alpha=0.2)
+
+    for ax in axs[len(metrics):]:
+        ax.set_visible(False)
+
+    handles, labels = axs[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        title='Frequency window [cm$^{-1}$]',
+        frameon=False,
+        loc='center left',
+        bbox_to_anchor=(1.01, 0.5),
+    )
+    if output_path:
+        fig.savefig(output_path, dpi=400, bbox_inches='tight')
+    plt.show()
+    return fig, axs
+
 def binned_vibrational_values(freqs_cm, temperature, freq_bins_cm):
     freqs_cm = np.asarray(freqs_cm, dtype=float)
     abs_freqs_cm = np.abs(freqs_cm)
@@ -1825,7 +2142,7 @@ def pretty_property_label(label):
     if is_t12_property(label):
         return r'$\mathbf{T}_{\mathbf{1/2}}$ [K]'
     if is_dhelec_property(label):
-        return r'$\mathbf{\Delta H}_{\mathbf{elec}}$ [kJ/mol]'
+        return r'$\Delta H_{\mathrm{elec}}$ [kJ/mol]'
     return str(label).replace('_', ' ').strip().title()
 
 def html_property_label_payload(label):
@@ -2168,6 +2485,89 @@ def ligand_family_dhelec_statistics(
     membership_rows.sort(key=lambda row: (int(row['Denticity']), row['Family'], row[value_column]))
     return statistics_rows, membership_rows
 
+def ligand_family_variance_decomposition(
+    map_data,
+    minimum_family_size=1,
+    value_column='dHelec [kJ/mol]',
+    n_permutations=2000,
+    random_seed=7,
+):
+    """Partition within-denticity variance into between- and within-family terms."""
+    records = []
+    for denticity, rows in map_data.items():
+        for row in rows:
+            value = as_float(row.get(value_column))
+            if value is not None:
+                records.append((str(denticity), row['family_id'], value))
+
+    family_sizes = Counter((denticity, family) for denticity, family, _ in records)
+    records = [
+        record for record in records
+        if family_sizes[(record[0], record[1])] >= minimum_family_size
+    ]
+    if not records:
+        raise ValueError('No ligand families satisfy the requested minimum size')
+
+    denticities = np.asarray([record[0] for record in records])
+    families = np.asarray([f'{record[0]}::{record[1]}' for record in records])
+    values = np.asarray([record[2] for record in records], dtype=float)
+    unique_denticities, denticity_codes = np.unique(denticities, return_inverse=True)
+    unique_families, family_codes = np.unique(families, return_inverse=True)
+    denticity_counts = np.bincount(denticity_codes)
+    family_counts = np.bincount(family_codes)
+    family_denticity_codes = np.asarray([
+        denticity_codes[np.flatnonzero(family_codes == family_index)[0]]
+        for family_index in range(len(unique_families))
+    ])
+
+    def sums_of_squares(candidate_values):
+        denticity_means = np.bincount(denticity_codes, weights=candidate_values) / denticity_counts
+        family_means = np.bincount(family_codes, weights=candidate_values) / family_counts
+        ss_family = np.sum(
+            family_counts * (family_means - denticity_means[family_denticity_codes]) ** 2
+        )
+        ss_within = np.sum((candidate_values - family_means[family_codes]) ** 2)
+        return float(ss_family), float(ss_within)
+
+    ss_family, ss_within = sums_of_squares(values)
+    family_df = len(unique_families) - len(unique_denticities)
+    within_df = len(values) - len(unique_families)
+    if family_df <= 0 or within_df <= 0:
+        raise ValueError('Insufficient repeated families for variance decomposition')
+
+    family_ms = ss_family / family_df
+    within_ms = ss_within / within_df
+    effective_family_size = (
+        len(values)
+        - sum(np.sum(family_counts[family_denticity_codes == denticity_index] ** 2) / denticity_counts[denticity_index]
+              for denticity_index in range(len(unique_denticities)))
+    ) / family_df
+    family_variance = max((family_ms - within_ms) / effective_family_size, 0.0)
+    within_variance = within_ms
+    intraclass_correlation = family_variance / (family_variance + within_variance)
+
+    rng = np.random.default_rng(random_seed)
+    permutation_ss = np.empty(n_permutations, dtype=float)
+    for permutation in range(n_permutations):
+        shuffled = values.copy()
+        for denticity_index in range(len(unique_denticities)):
+            indices = np.flatnonzero(denticity_codes == denticity_index)
+            shuffled[indices] = rng.permutation(shuffled[indices])
+        permutation_ss[permutation] = sums_of_squares(shuffled)[0]
+    permutation_p = (1 + np.sum(permutation_ss >= ss_family)) / (n_permutations + 1)
+
+    return {
+        'Minimum Family Size': minimum_family_size,
+        'Num Entries': len(values),
+        'Num Families': len(unique_families),
+        'Between-Family SS Fraction': ss_family / (ss_family + ss_within),
+        'Between-Family Variance [kJ2/mol2]': family_variance,
+        'Within-Family Variance [kJ2/mol2]': within_variance,
+        'Family ICC': intraclass_correlation,
+        'Permutation p-value': permutation_p,
+        'Num Permutations': n_permutations,
+    }
+
 def rounded_rows(rows, digits_by_column):
     rounded = []
     for row in rows:
@@ -2227,9 +2627,9 @@ def add_family_legends(fig, colors=None, fontsize=9):
     }
     area_handles = [
         plt.Line2D([0], [0], color=colors['central_window'], lw=10,
-                   label=r'Tunability, $\Delta H_{\mathrm{elec}}^{width}$'),
+                   label='Main distribution'),
         plt.Line2D([0], [0], color=colors['outside'], lw=10, alpha=0.35,
-                   label='Outlier Window'),
+                   label='Outliers'),
     ]
     point_handles = [
         plt.Line2D([0], [0], marker='o', color='none', markerfacecolor=colors['central_point'],
@@ -2241,12 +2641,14 @@ def add_family_legends(fig, colors=None, fontsize=9):
                    label=r'Baseline, $\Delta H_{\mathrm{elec}}^{base}$'),
     ]
     fig.legend(
-        handles=area_handles, loc='upper center', bbox_to_anchor=(0.5, 0.98),
-        ncol=2, frameon=False, fontsize=fontsize, columnspacing=2.4, handlelength=2.7,
-    )
-    fig.legend(
-        handles=point_handles, loc='upper center', bbox_to_anchor=(0.5, 0.92),
-        ncol=3, frameon=False, fontsize=fontsize, columnspacing=2.2, handlelength=1.5,
+        handles=area_handles + point_handles,
+        loc='upper center',
+        bbox_to_anchor=(0.5, 0.98),
+        ncol=5,
+        frameon=False,
+        fontsize=fontsize,
+        columnspacing=1.6,
+        handlelength=1.8,
     )
 
 ###################
@@ -2326,3 +2728,144 @@ def as_float(value):
 def get_last_author(authors):
     author_parts = [part.strip() for part in str(authors).split(';') if part.strip()]
     return author_parts[-1] if author_parts else 'unknown'
+
+################################
+#### ATLAS Result Finalization ##
+################################
+def parse_atlas_result_value(value, value_type='float'):
+    """Normalize a CSV value before storing it in a SCOPE Data object."""
+    if value is None or str(value).strip().lower() in ('', 'none', 'nan', '-'):
+        return None
+
+    if value_type == 'str':
+        return str(value).strip()
+    if value_type == 'bool':
+        if isinstance(value, bool):
+            return value
+        normalized = str(value).strip().lower()
+        if normalized in ('true', '1', 'yes'):
+            return True
+        if normalized in ('false', '0', 'no'):
+            return False
+        raise ValueError(f"Cannot interpret {value!r} as a boolean")
+
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = literal_eval(value.strip())
+        except (SyntaxError, ValueError):
+            parsed = value.strip()
+    if isinstance(parsed, (list, tuple, np.ndarray)):
+        if len(parsed) != 1:
+            raise ValueError(f"Expected one scalar value, received {parsed!r}")
+        parsed = parsed[0]
+
+    if value_type == 'float':
+        return float(parsed)
+    if value_type == 'int':
+        return int(parsed)
+    raise ValueError(f"Unsupported ATLAS result value type: {value_type!r}")
+
+def create_atlas_data(
+    key,
+    value,
+    units,
+    atlas_release,
+    entry_refcode,
+    canonical_refcode,
+    inherited,
+    source_table,
+    source_column,
+    temperature=None,
+):
+    """Create a standard SCOPE Data object with ATLAS provenance metadata."""
+    result = Data(
+        key=key,
+        value=value,
+        units=units,
+        function='atlas_functions.register_atlas_row_results',
+        notes='Curated SCO ATLAS core result',
+    )
+    result.atlas_release = atlas_release
+    result.entry_refcode = entry_refcode
+    result.canonical_refcode = canonical_refcode
+    result.inherited = bool(inherited)
+    result.source_table = source_table
+    result.source_column = source_column
+    if temperature is not None:
+        result.temperature = float(temperature)
+    result.provenance = {
+        'atlas_release': atlas_release,
+        'entry_refcode': entry_refcode,
+        'canonical_refcode': canonical_refcode,
+        'inherited': bool(inherited),
+        'source_table': source_table,
+        'source_column': source_column,
+    }
+    if temperature is not None:
+        result.provenance['temperature'] = float(temperature)
+    return result
+
+def register_atlas_row_results(
+    branch,
+    row,
+    schema,
+    atlas_release,
+    entry_refcode,
+    canonical_refcode,
+    source_table,
+    inherited=False,
+    overwrite=False,
+):
+    """Register selected CSV columns as curated branch-level ATLAS results."""
+    registered_keys = []
+    for specification in schema:
+        column = specification['column']
+        if column not in row:
+            raise KeyError(f"Column {column!r} is missing from {source_table}")
+        value = parse_atlas_result_value(
+            row[column],
+            value_type=specification.get('value_type', 'float'),
+        )
+        result = create_atlas_data(
+            key=specification['key'],
+            value=value,
+            units=specification.get('units', ''),
+            atlas_release=atlas_release,
+            entry_refcode=entry_refcode,
+            canonical_refcode=canonical_refcode,
+            inherited=inherited,
+            source_table=source_table,
+            source_column=column,
+            temperature=specification.get('temperature'),
+        )
+        branch.add_result(result, overwrite=overwrite)
+        registered_keys.append(result.key)
+    return registered_keys
+
+def copy_atlas_results(
+    source_branch,
+    target_branch,
+    entry_refcode,
+    canonical_refcode,
+    prefix='atlas_',
+    overwrite=False,
+):
+    """Copy only curated ATLAS results while retaining representative provenance."""
+    copied_keys = []
+    for key, result in source_branch.results.items():
+        if not key.startswith(prefix):
+            continue
+        copied = deepcopy(result)
+        copied.entry_refcode = entry_refcode
+        copied.canonical_refcode = canonical_refcode
+        copied.inherited = True
+        copied.provenance = dict(getattr(copied, 'provenance', {}))
+        copied.provenance.update({
+            'entry_refcode': entry_refcode,
+            'canonical_refcode': canonical_refcode,
+            'inherited': True,
+        })
+        target_branch.add_result(copied, overwrite=overwrite)
+        copied_keys.append(key)
+    return copied_keys

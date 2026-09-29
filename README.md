@@ -1,59 +1,149 @@
-# SCO ATLAS Data
+# SCO ATLAS
 
-This directory contains the Data and Analyses associated with the **SCO ATLAS**, a collection of spin-crossover (SCO) systems represented and analysed with SCOPE. The analysis accompanying the present manuscript focuses on the "Isolated" branch, consisting of gas-phase computations for the high-spin (HS) and low-spin (LS) states of those SCO complexes.
+This repository contains the analysis notebooks, derived tabular data, figures,
+and manuscript associated with the **SCO ATLAS**. The ATLAS is a collection of
+experimentally grounded Fe(II)N6 transition-metal complexes represented and
+analysed with SCOPE.
+
+The large source, system, and computation files are stored separately from this
+Git repository. In the current local layout, the two locations are:
+
+```text
+/Users/sergivela/Documents/SCOPE/Sub-Projects/1-ATLAS/  # This repository
+/Users/sergivela/Documents/SCOPE/ATLAS/Data/            # External data store
+```
+
+The manuscript accompanying the present release analyses the `isolated` branch,
+which contains gas-phase HS and LS calculations. The data store also contains a
+`solid` branch that will be analysed separately.
+
+## Repository Structure
+
+```text
+1-ATLAS/
+├── Analysis/
+│   ├── Bibliography/   Bibliographic lookup and retrieval utilities
+│   ├── Notebooks/      Numbered analysis notebooks and shared functions
+│   ├── Outputs/        Derived CSV and LaTeX data products
+│   └── Results/        Additional analysis resources
+├── Figures/            Static and interactive figures
+├── Manuscript/         Main text, ESI, bibliography, and LaTeX build files
+├── Notes/              Scientific and development notes
+├── AGENTS.md            Project context for coding assistants
+└── README.md
+```
+
+Development material under `Old/`, notebook checkpoints, caches, and local
+backups are not part of the released analysis.
+
+## Data Store
+
+The external data store is expected to have the following structure:
+
+```text
+ATLAS/
+└── Data/
+    ├── 1-Sources/          Experimental structures and SCOPE Source objects
+    ├── 2-Systems/          Serialized SCOPE System objects
+    ├── 3-Computations/
+    │   └── <system>/
+    │       ├── isolated/   Gas-phase molecular calculations
+    │       └── solid/      Periodic solid-state calculations, when available
+    ├── scope_env_atlas.npy Serialized SCOPE Environment object
+    ├── *.scope             SCOPE workflow definitions
+    └── *.py                Workflow execution scripts
+```
+
+Each file under `Data/2-Systems/<system>/` links the corresponding sources,
+branches, workflows, calculations, and derived results. These serialized System
+objects are the principal entry points for navigating the ATLAS with SCOPE.
+
+Instructions for exporting the shared data and computation branches as separate
+archives are provided in `/Users/sergivela/Documents/SCOPE/ATLAS/README.md`.
 
 ## Requirements
 
-- A Python environment with **SCOPE 0.9.6** installed.
-- The SCOPE core and SCO packages must both be importable as `scope` and `scope_sco`.
-- The complete `Data` directory, including `scope_env_atlas.npy`.
+- Python 3.12.
+- SCOPE 0.9.6, including the core and SCO packages importable as `scope` and
+  `scope_sco`.
+- The complete shared ATLAS data and the computation branch required by the
+  analysis being run.
+- The supplied `Data/scope_env_atlas.npy` environment file.
 
-The installed version can be checked with:
+Check the installed SCOPE version with:
 
 ```bash
 python -c "import scope; print(scope.__version__)"
 ```
 
-The analysis notebooks accompanying this dataset are intended to be run with SCOPE 0.9.6, and Notebook 0 validates this version before loading the data. The notebooks will also be published in the project repository and updated, when necessary, as SCOPE evolves; users of later SCOPE releases should therefore consult the current repository version of the analysis.
+The notebooks in this release target SCOPE 0.9.6. The repository may be updated
+as SCOPE evolves, so users of later releases should consult the current notebook
+version.
 
-## Contents
+## Notebook Configuration
 
-```text
-Data/
-├── 1-Sources/          Experimental structures and SCOPE source objects
-├── 2-Systems/          Serialized SCOPE System objects
-├── 3-Computations/     Quantum-chemistry calculation files
-├── scope_env_atlas.npy Serialized SCOPE Environment object
-├── *.scope             SCOPE workflow definitions
-└── *.py                Scripts used to run the workflows
-```
-
-Each directory below `2-Systems/` contains the binary `System` object that connects the corresponding sources, HS and LS states, computations, workflows, and derived results. These System files are the principal entry points for navigating the ATLAS.
-
-The development-only `old/` directory is not part of the distributed dataset.
-
-## Local Configuration
-
-The serialized environment records the paths used when the ATLAS was created. Notebook `0-Create_System_Files.ipynb` therefore remaps it to the local data copy. Set the following paths in its configuration cell:
+Notebook `Analysis/Notebooks/0-Prepare_Systems.ipynb` is the analysis entry point.
+Its configuration cell defines the external data store and this repository's
+analysis directory:
 
 ```python
-data_path     = "/path/to/Database_SCO/Data/"
-env_path      = "/path/to/Database_SCO/Data/scope_env_atlas.npy"
-analysis_path = "/path/to/Database_SCO/Analysis/"
+data_path     = "/path/to/ATLAS/Data/"
+analysis_path = "/path/to/1-ATLAS/Analysis/"
+env_path      = "/path/to/ATLAS/Data/scope_env_atlas.npy"
 ```
 
-The notebook checks the SCOPE version and the presence of `1-Sources`, `2-Systems`, `3-Computations`, and the environment file before continuing.
+Notebook 0 checks the SCOPE version and required data directories before loading
+the serialized environment. It then creates the CSV indexes used by subsequent
+notebooks, including `finished_systems.csv`, `not_finished_systems.csv`,
+`unique_systems.csv`, and `filtered_structure_systems.csv` in `Analysis/Outputs/`.
 
-## Analysis Entry Points
-
-The notebooks under `Analysis/Notebooks/` operate on selected collections of System objects rather than duplicating those binaries. Notebook 0 prepares CSV indexes such as `finished_systems.csv`, `not_finished_systems.csv`, `unique_systems.csv`, and `filtered_structure_systems.csv` in `Analysis/Outputs/`.
-
-The `path` fields in newly generated indexes are stored relative to the project root, for example:
+System paths in these indexes are relative to the external `Data/` directory:
 
 ```text
-Data/2-Systems/ABITEM/ABITEM.npy
+2-Systems/ABITEM/ABITEM.npy
 ```
 
-This keeps the data relocatable while preserving the real on-disk names of systems whose CSD refcodes contain suffixes such as `01` or `02`. Subsequent notebooks load the indexed System objects and call `system.set_paths_from_environment(env)` so their internal source and computation paths refer to the configured local data copy.
+This keeps the indexes relocatable. After loading a System, the notebooks call
+`system.set_paths_from_environment(env)` to remap its source and computation
+paths to the configured local data store.
 
-SCOPE binary files should only be loaded from a trusted copy of the dataset.
+The main notebooks are:
+
+```text
+0-Prepare_Systems.ipynb
+1-Crystal_Breakdown.ipynb
+2-Bibliographic_Data.ipynb
+3-Thermodynamics.ipynb
+4-Ligand_Composition.ipynb
+5-Structural_Correlations.ipynb
+```
+
+Notebooks beginning with `X-` are diagnostic or exploratory and are not required
+for the standard analysis sequence. Shared notebook helpers are collected in
+`Analysis/Notebooks/atlas_functions.py`.
+
+## Manuscript
+
+The manuscript uses XeLaTeX, Biber, and `biblatex`. Build the ESI followed by the
+main document from the repository root with:
+
+```bash
+make -C Manuscript
+```
+
+The current PDFs are written to:
+
+```text
+Manuscript/build/main.pdf
+Manuscript/build/esi.pdf
+```
+
+See `Manuscript/README.md` for the LaTeX Workshop configuration and troubleshooting
+instructions.
+
+## Trust and Distribution
+
+SCOPE System and Environment files are serialized Python objects and should only
+be loaded from a trusted copy of the dataset. Before public distribution, confirm
+that all crystallographic source material is shared in accordance with the
+applicable CSD/CCDC licensing conditions.
