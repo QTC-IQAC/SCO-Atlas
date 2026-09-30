@@ -1911,6 +1911,7 @@ def write_interactive_html(
     output_html_path,
     properties_to_show,
     color_property='last_author',
+    color_properties=None,
     title=None,
     caption=None,
     top_n_categories=20,
@@ -1922,8 +1923,40 @@ def write_interactive_html(
     output_html_path.parent.mkdir(parents=True, exist_ok=True)
     available_columns = set().union(*(row.keys() for row in map_rows))
     property_specs = resolve_property_specs(normalize_property_specs(properties_to_show), available_columns)
-    color_key = resolve_property_key(color_property, property_specs, available_columns)
-    map_rows, legend_items = add_color_column(map_rows, color_key, top_n_categories=top_n_categories)
+    color_properties = list(dict.fromkeys(color_properties or [color_property]))
+    if color_property not in color_properties:
+        color_properties.insert(0, color_property)
+
+    point_colors = {}
+    color_configs = {}
+    for property_name in color_properties:
+        color_key = resolve_property_key(property_name, property_specs, available_columns)
+        colored_rows, legend_items = add_color_column(
+            map_rows,
+            color_key,
+            top_n_categories=top_n_categories,
+        )
+        point_colors[property_name] = [row['_point_color'] for row in colored_rows]
+
+        property_spec = next(
+            (spec for spec in property_specs if spec['key'] == color_key),
+            {'label': property_name, 'key': color_key, 'unit': None, 'digits': 2},
+        )
+        legend_payload = []
+        for idx, item in enumerate(legend_items):
+            payload = dict(item)
+            payload['x'] = plot_width - 230 + 30
+            payload['y'] = 18 + 25 + idx * 22
+            legend_payload.append(payload)
+
+        color_configs[property_name] = {
+            'color_key': color_key,
+            'plain_label': plain_property_label(property_name),
+            'label': html_property_label_payload(property_name),
+            'legend': legend_payload,
+            'unit': property_spec.get('unit'),
+            'digits': property_spec.get('digits', 2),
+        }
 
     margin = {'left': 42, 'right': 230, 'top': 18, 'bottom': 38}
     x_values = np.asarray([row['map_x'] for row in map_rows] + [row['family_x'] for row in family_rows])
@@ -1952,7 +1985,7 @@ def write_interactive_html(
         })
 
     point_payload = []
-    for row in map_rows:
+    for row_idx, row in enumerate(map_rows):
         mol_svg = mol_to_svg(ligand_mols_by_refcode.get(row['Refcode']))
         property_rows = []
         for spec in property_specs:
@@ -1963,7 +1996,7 @@ def write_interactive_html(
         property_html = '\n'.join(property_rows)
         tooltip_html = f"""
             <div class="tooltip-title">{escape(row['Refcode'])}</div>
-            <div class="tooltip-subtitle">{escape(str(color_property))}: {escape(format_value(row.get(color_key, '-')))}</div>
+            <div class="tooltip-subtitle" data-color-summary></div>
             <div class="mol-svg">{mol_svg}</div>
             <table>
                 <tr><td>Family</td><td>{escape(row['family_id'])} ({escape(row['Core-ring family'])})</td></tr>
@@ -1978,19 +2011,27 @@ def write_interactive_html(
             'y': float(scale_y(row['map_y'])),
             'family_x': float(scale_x(row['family_x'])),
             'family_y': float(scale_y(row['family_y'])),
-            'color': row['_point_color'],
+            'colors': {
+                property_name: point_colors[property_name][row_idx]
+                for property_name in color_properties
+            },
+            'color_values': {
+                property_name: format_value(
+                    row.get(config['color_key']),
+                    digits=config['digits'],
+                    unit=config['unit'],
+                )
+                for property_name, config in color_configs.items()
+            },
             'tooltip_html': tooltip_html,
         })
 
-    legend_payload = []
-    for idx, item in enumerate(legend_items):
-        payload = dict(item)
-        payload['x'] = plot_width - margin['right'] + 30
-        payload['y'] = margin['top'] + 25 + idx * 22
-        legend_payload.append(payload)
-
     title = title or 'Interactive core-ring ligand map'
     caption = caption or 'Grey radial lines connect each compound to its family center. Hover points to inspect ligand and metadata.'
+    option_html = '\n'.join(
+        f'<option value="{escape(property_name)}"{" selected" if property_name == color_property else ""}>{escape(config["plain_label"])}</option>'
+        for property_name, config in color_configs.items()
+    )
 
     html_doc = f"""<!DOCTYPE html>
 <html>
@@ -2002,6 +2043,8 @@ body {{ margin: 0; font-family: Helvetica, Arial, sans-serif; background: #fffff
 .wrapper {{ position: relative; width: {plot_width}px; margin: 0 auto; }}
 .title {{ font-size: 18px; font-weight: 700; margin: 14px 0 2px 0; }}
 .caption {{ font-size: 12px; color: #4b5563; margin-bottom: 8px; max-width: 820px; }}
+.controls {{ display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; font-weight: 700; }}
+.controls select {{ font: inherit; font-weight: 400; padding: 3px 24px 3px 7px; border: 1px solid #9ca3af; border-radius: 4px; background: white; }}
 svg {{ border: 1.4px solid black; background: white; }}
 .branch-line {{ stroke: #c7c7c7; stroke-width: 0.8; pointer-events: none; }}
 .family-center {{ fill: #111827; stroke: white; stroke-width: 1.2; opacity: 0.85; }}
@@ -2025,17 +2068,18 @@ td:first-child {{ color: #4b5563; width: 35%; }}
 <div class="wrapper">
   <div class="title">{escape(title)}</div>
   <div class="caption">{escape(caption)}</div>
+  <div class="controls"><label for="color-property">Color by</label><select id="color-property">{option_html}</select></div>
   <svg id="plot" width="{plot_width}" height="{plot_height}" viewBox="0 0 {plot_width} {plot_height}"></svg>
   <div id="tooltip" class="tooltip"></div>
 </div>
 <script>
 const points = {json.dumps(point_payload)};
 const families = {json.dumps(family_payload)};
-const legend = {json.dumps(legend_payload)};
-const legendTitle = {json.dumps(html_property_label_payload(color_property))};
+const colorConfigs = {json.dumps(color_configs)};
 const svg = document.getElementById('plot');
 const tooltip = document.getElementById('tooltip');
 const wrapper = document.querySelector('.wrapper');
+const colorSelector = document.getElementById('color-property');
 const ns = 'http://www.w3.org/2000/svg';
 function add(tag, attrs, text) {{
   const element = document.createElementNS(ns, tag);
@@ -2051,6 +2095,8 @@ for (const family of families) {{
   centerTitle.textContent = family.family_id + ' | n=' + family.family_count + ' | ' + family.family;
   center.appendChild(centerTitle);
 }}
+let activeProperty = colorSelector.value;
+const pointElements = [];
 function positionTooltip(event) {{
   const wrapperRect = wrapper.getBoundingClientRect();
   const localX = event.clientX - wrapperRect.left;
@@ -2065,41 +2111,54 @@ function positionTooltip(event) {{
   tooltip.style.top = Math.max(8, top) + 'px';
 }}
 for (const point of points) {{
-  const circle = add('circle', {{cx: point.x, cy: point.y, r: 5.2, fill: point.color, class: 'point'}});
-  circle.addEventListener('mousemove', (event) => {{ tooltip.style.display = 'block'; tooltip.innerHTML = point.tooltip_html; requestAnimationFrame(() => positionTooltip(event)); }});
+  const circle = add('circle', {{cx: point.x, cy: point.y, r: 5.2, fill: point.colors[activeProperty], class: 'point'}});
+  pointElements.push(circle);
+  circle.addEventListener('mousemove', (event) => {{
+    tooltip.style.display = 'block';
+    tooltip.innerHTML = point.tooltip_html;
+    const summary = tooltip.querySelector('[data-color-summary]');
+    summary.textContent = colorConfigs[activeProperty].plain_label + ': ' + point.color_values[activeProperty];
+    requestAnimationFrame(() => positionTooltip(event));
+  }});
   circle.addEventListener('mouseleave', () => {{ tooltip.style.display = 'none'; }});
 }}
 <!-- add('text', {{x: {margin['left'] + (plot_width - margin['left'] - margin['right']) / 2}, y: {plot_height - 16}, class: 'axis-label', 'text-anchor': 'middle'}}, 'Map coordinate 1') -->;
 <!-- add('text', {{x: 18, y: {margin['top'] + (plot_height - margin['top'] - margin['bottom']) / 2}, class: 'axis-label', transform: 'rotate(-90 18 {margin['top'] + (plot_height - margin['top'] - margin['bottom']) / 2})', 'text-anchor': 'middle'}}, 'Map coordinate 2') -->;
-const legendTitleElement = add('text', {{x: {plot_width - margin['right'] + 30}, y: {margin['top']}, class: 'legend-title'}});
-if (legendTitle.kind === 't12') {{
-  legendTitleElement.appendChild(document.createTextNode('T'));
-  const sub = document.createElementNS(ns, 'tspan');
-  sub.setAttribute('baseline-shift', 'sub');
-  sub.setAttribute('font-size', '75%');
-  sub.textContent = '1/2';
-  legendTitleElement.appendChild(sub);
-  const unit = document.createElementNS(ns, 'tspan');
-  unit.setAttribute('class', 'legend-unit');
-  unit.textContent = ' [K]';
-  legendTitleElement.appendChild(unit);
-}} else if (legendTitle.kind === 'dhelec') {{
-  legendTitleElement.appendChild(document.createTextNode('ΔH'));
-  const sub = document.createElementNS(ns, 'tspan');
-  sub.setAttribute('baseline-shift', 'sub');
-  sub.setAttribute('font-size', '75%');
-  sub.textContent = 'elec';
-  legendTitleElement.appendChild(sub);
-  const unit = document.createElementNS(ns, 'tspan');
-  unit.setAttribute('class', 'legend-unit');
-  unit.textContent = ' [kJ/mol]';
-  legendTitleElement.appendChild(unit);
-}} else {{
-  legendTitleElement.textContent = legendTitle.text;
+function renderLegendTitle(legendTitle) {{
+  const legendTitleElement = add('text', {{x: {plot_width - margin['right'] + 30}, y: {margin['top']}, class: 'legend-title dynamic-legend'}});
+  if (legendTitle.kind === 't12') {{
+    legendTitleElement.appendChild(document.createTextNode('T'));
+    const sub = document.createElementNS(ns, 'tspan');
+    sub.setAttribute('baseline-shift', 'sub');
+    sub.setAttribute('font-size', '75%');
+    sub.textContent = '1/2';
+    legendTitleElement.appendChild(sub);
+    const unit = document.createElementNS(ns, 'tspan');
+    unit.setAttribute('class', 'legend-unit');
+    unit.textContent = ' [K]';
+    legendTitleElement.appendChild(unit);
+  }} else if (legendTitle.kind === 'dhelec') {{
+    legendTitleElement.appendChild(document.createTextNode('ΔH'));
+    const sub = document.createElementNS(ns, 'tspan');
+    sub.setAttribute('baseline-shift', 'sub');
+    sub.setAttribute('font-size', '75%');
+    sub.textContent = 'elec';
+    legendTitleElement.appendChild(sub);
+    const unit = document.createElementNS(ns, 'tspan');
+    unit.setAttribute('class', 'legend-unit');
+    unit.textContent = ' [kJ/mol]';
+    legendTitleElement.appendChild(unit);
+  }} else {{
+    legendTitleElement.textContent = legendTitle.text;
+  }}
 }}
-for (const item of legend) {{
+function renderLegend(propertyName) {{
+  svg.querySelectorAll('.dynamic-legend').forEach((element) => element.remove());
+  const config = colorConfigs[propertyName];
+  renderLegendTitle(config.label);
+  for (const item of config.legend) {{
   if (item.kind === 'colorbar') {{
-    const defs = svg.querySelector('defs') || add('defs', {{}});
+    const defs = add('defs', {{class: 'dynamic-legend'}});
     const gradientId = 'colorbar-gradient-' + Math.random().toString(36).slice(2);
     const gradient = document.createElementNS(ns, 'linearGradient');
     const barWidth = 22;
@@ -2118,17 +2177,26 @@ for (const item of legend) {{
       gradient.appendChild(stop);
     }});
     defs.appendChild(gradient);
-    add('rect', {{x: barX, y: barY, width: barWidth, height: barHeight, fill: 'url(#' + gradientId + ')', stroke: 'black', 'stroke-width': 0.6}});
+    add('rect', {{x: barX, y: barY, width: barWidth, height: barHeight, fill: 'url(#' + gradientId + ')', stroke: 'black', 'stroke-width': 0.6, class: 'dynamic-legend'}});
     for (const tick of item.ticks) {{
       const tickY = barY + barHeight * (1 - tick.position);
-      add('line', {{x1: barX + barWidth, y1: tickY, x2: barX + barWidth + 7, y2: tickY, stroke: 'black', 'stroke-width': 0.7}});
-      add('text', {{x: barX + barWidth + 11, y: tickY + 3.5, class: 'legend-text'}}, tick.value);
+      add('line', {{x1: barX + barWidth, y1: tickY, x2: barX + barWidth + 7, y2: tickY, stroke: 'black', 'stroke-width': 0.7, class: 'dynamic-legend'}});
+      add('text', {{x: barX + barWidth + 11, y: tickY + 3.5, class: 'legend-text dynamic-legend'}}, tick.value);
     }}
   }} else {{
-    add('circle', {{cx: item.x, cy: item.y, r: 5, fill: item.color, stroke: 'black', 'stroke-width': 0.4}});
-    add('text', {{x: item.x + 11, y: item.y, class: 'legend-text'}}, item.label);
+    add('circle', {{cx: item.x, cy: item.y, r: 5, fill: item.color, stroke: 'black', 'stroke-width': 0.4, class: 'dynamic-legend'}});
+    add('text', {{x: item.x + 11, y: item.y, class: 'legend-text dynamic-legend'}}, item.label);
+  }}
   }}
 }}
+function updateColorProperty() {{
+  activeProperty = colorSelector.value;
+  pointElements.forEach((pointElement, idx) => pointElement.setAttribute('fill', points[idx].colors[activeProperty]));
+  tooltip.style.display = 'none';
+  renderLegend(activeProperty);
+}}
+colorSelector.addEventListener('change', updateColorProperty);
+updateColorProperty();
 </script>
 </body>
 </html>"""
@@ -2143,6 +2211,13 @@ def pretty_property_label(label):
         return r'$\mathbf{T}_{\mathbf{1/2}}$ [K]'
     if is_dhelec_property(label):
         return r'$\Delta H_{\mathrm{elec}}$ [kJ/mol]'
+    return str(label).replace('_', ' ').strip().title()
+
+def plain_property_label(label):
+    if is_t12_property(label):
+        return 'T1/2'
+    if is_dhelec_property(label):
+        return 'ΔHelec'
     return str(label).replace('_', ' ').strip().title()
 
 def html_property_label_payload(label):
@@ -2299,7 +2374,7 @@ def generate_core_ring_interactive_map(
     properties_to_show,        # Tooltip specification: display label -> metadata key/unit/digits.
     color_property,            # Column/property used to color the points and build the legend.
     target_denticity,          # Only ligands with this denticity are included in the map.
-    output_path,               # Shared output basename; .html, .csv, and manuscript .png are created.
+    output_path,               # Shared output basename for the generated .html and .csv files.
     embedding_method='mds',    # Method for placing families/members by fingerprint similarity: 'mds' or 'pca'.
     grid=False,                # If True, snap family centers to a sparse grid; otherwise keep continuous layout.
     top_n_categories=20,       # Number of categorical color groups kept before assigning the rest to 'Other'.
@@ -2311,6 +2386,8 @@ def generate_core_ring_interactive_map(
     display_iframe=False,      # If True, display the generated HTML in the notebook immediately.
     png_figsize=(7.9, 6.6),    # Manuscript PNG size in inches; legend is placed outside the map frame.
     png_dpi=400,               # Resolution of the automatically generated PNG.
+    color_properties=None,     # Optional properties exposed by the HTML color selector.
+    create_png=True,           # If True, also write a static PNG for color_property.
 ):
     map_rows, family_rows, selected_records, embedding = build_core_ring_map_data(
         descriptor_records,
@@ -2326,7 +2403,7 @@ def generate_core_ring_interactive_map(
     )
 
     html_path = str(output_path)+'.html'
-    png_path = str(output_path)+'.png'
+    png_path = str(output_path)+'.png' if create_png else None
     csv_path = str(output_path)+'.csv'
 
     # Creates .csv
@@ -2369,22 +2446,24 @@ def generate_core_ring_interactive_map(
         output_html_path=html_path,
         properties_to_show=properties_to_show,
         color_property=color_property,
+        color_properties=color_properties,
         title=title,
         caption=caption,
         top_n_categories=top_n_categories,
     )
 
-    # Creates manuscript-style .png without title, caption, or interactive elements.
-    write_static_png(
-        map_rows,
-        family_rows,
-        output_png_path=png_path,
-        properties_to_show=properties_to_show,
-        color_property=color_property,
-        top_n_categories=top_n_categories,
-        figsize=png_figsize,
-        dpi=png_dpi,
-    )
+    # Optionally creates a manuscript-style .png without interactive elements.
+    if create_png:
+        write_static_png(
+            map_rows,
+            family_rows,
+            output_png_path=png_path,
+            properties_to_show=properties_to_show,
+            color_property=color_property,
+            top_n_categories=top_n_categories,
+            figsize=png_figsize,
+            dpi=png_dpi,
+        )
 
 
     if display_iframe:

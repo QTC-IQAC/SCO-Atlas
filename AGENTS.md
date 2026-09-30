@@ -22,11 +22,13 @@
 
 ## Repository Structure
 
-- Analysis notebooks: `Analysis/Notebooks/`.
-- Shared notebook helpers: `Analysis/Notebooks/atlas_functions.py`.
-- Derived tables and CSV files: `Analysis/Outputs/`.
-- Bibliographic tools and journal data: `Analysis/Bibliography/`.
-- Figures and interactive maps: `Figures/`.
+- Current analysis layer: `Analysis/1-TMC_Thermodynamics/`.
+- Analysis notebooks: `Analysis/1-TMC_Thermodynamics/Notebooks/`.
+- Shared notebook helpers: `Analysis/1-TMC_Thermodynamics/Notebooks/atlas_functions.py`.
+- Derived tables and CSV files: `Analysis/1-TMC_Thermodynamics/Outputs/`.
+- Bibliographic tools and journal data: `Analysis/1-TMC_Thermodynamics/Bibliography/`.
+- Local figures: `Analysis/1-TMC_Thermodynamics/Figures/`.
+- Versioned interactive maps: `Analysis/1-TMC_Thermodynamics/Figures/HTML/`.
 - Scientific and development notes: `Notes/`.
 - Main manuscript and ESI: `Manuscript/main.tex` and `Manuscript/esi.tex`.
 - LaTeX PDFs: `Manuscript/build/main.pdf` and `Manuscript/build/esi.pdf`.
@@ -40,6 +42,8 @@ The standard analysis sequence is:
 3-Thermodynamics.ipynb
 4-Ligand_Composition.ipynb
 5-Structural_Correlations.ipynb
+6-VNM_Analysis.ipynb
+7-Finalize_ATLAS.ipynb
 ```
 
 Files beginning with `X-` are diagnostic or exploratory notebooks. Some of them
@@ -64,7 +68,7 @@ The large ATLAS data are deliberately kept outside the Git repository:
 └── *.py
 ```
 
-System indexes in `Analysis/Outputs/` store paths relative to the external
+System indexes in `Analysis/1-TMC_Thermodynamics/Outputs/` store paths relative to the external
 `Data/` directory, for example `2-Systems/ABITEM/ABITEM.npy`. Notebooks load the
 serialized environment and call `system.set_paths_from_environment(env)` to
 restore local source and computation paths.
@@ -91,8 +95,8 @@ The data-store release and branch-compression instructions live in
 ## Manuscript
 
 - Build the ESI before the main manuscript with `make -C Manuscript`.
-- Figures are read through `Manuscript/figures`, a link to the repository-level
-  `Figures/` directory.
+- Figures are read through `Manuscript/figures`, a link to
+  `Analysis/1-TMC_Thermodynamics/Figures/`.
 - Do not edit prose unless requested. When discussing manuscript changes, propose
   LaTeX text in chat unless the user explicitly asks for direct modification.
 - Keep gas-phase molecular results distinct from experimental crystal or

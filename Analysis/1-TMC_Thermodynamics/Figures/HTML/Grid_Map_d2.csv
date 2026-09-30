@@ -1,0 +1,51 @@
+Refcode,family_id,family_count,grid_row,grid_column,Core-ring family,last_author,journal,year,dHelec [kJ/mol],dHvib [kJ/mol],dSvibT [kJ/mol],dGtot [kJ/mol],T1/2 [K]
+ESUPIU,"F(1,1)",1,1,1,1x[C10N3S],J.Kaizer,Dalton Trans.,2021,11.826566,-4.13413,22.07774,-18.372802,66.0
+ILOWUD,"F(1,2)",1,1,2,1x[C5N6],J.M.Veauthier,J.Am.Chem.Soc.,2016,72.690307,-6.300828,26.788671,35.61331,
+HIKGEQ,"F(1,3)",1,1,3,1x[C12N3],C.Piguet,Chem.-Eur.J.,2018,-6.762606,-4.972756,12.480502,-28.203362,
+KAMRUP,"F(1,4)",1,1,4,1x[C16N2],A.Onoda,Chem.-Eur.J.,2021,57.935049,-5.415938,19.435349,29.096263,
+IKODUK,"F(1,5)",1,1,5,1x[C11N4],C.Piguet,Dalton Trans.,2021,24.593612,-4.707075,20.192934,-4.293896,245.0
+BOCKIQ,"F(1,6)",1,1,6,1x[C6N5],S.Brooker,Chem.Asian J.,2019,38.887307,-6.860261,3.200551,24.838997,
+NOKFOJ,"F(2,1)",1,2,1,1x[C14N2],J.A.Real,Inorg.Chim.Acta,2008,-1.705525,-10.693294,10.699553,-27.08587,
+BADWAG,"F(2,2)",3,2,2,1x[C12N2],J.B.Baruah,J.Chem.Cryst.,2012,44.552638,-5.033291,17.98543,17.546418,
+EDUKUL,"F(2,2)",3,2,2,1x[C12N2],I.Potocnak,"Acta Crystallogr.,Sect.E:Struct.Rep.Online",2012,49.975871,-4.732725,17.497871,23.757776,
+YIYWAF,"F(2,2)",3,2,2,1x[C12N2],M.Almeida,Polyhedron,2008,41.117591,-4.272149,12.494114,20.363831,
+CIRCUD,"F(2,3)",2,2,3,1x[C7N4],J.D.Crowley,Molecules,2013,54.085908,-4.706673,21.323517,24.06822,
+FUFJAS,"F(2,3)",2,2,3,1x[C7N4],S.Brooker,Inorg.Chem.,2009,37.61268,-4.332005,8.45551,20.837666,
+NEXMEK,"F(2,4)",1,2,4,1x[C10N5],Yanhua Lan,Polyhedron,2013,58.729473,-4.439029,20.272961,30.029984,
+ARAGEH,"F(2,5)",2,2,5,1x[C8N3],Bai-Wang Sun,Polyhedron,2017,38.940526,-3.762308,13.791596,17.399124,
+KINQUT,"F(2,5)",2,2,5,1x[C8N3],H.A.Goodwin,Aust.J.Chem.,1999,29.434299,-3.816558,19.594374,2.035869,324.0
+BINZUW,"F(2,6)",1,2,6,hybrid[scaffold=1x[C9N];sites=C9N:donors=1:distance=2;eff. connectivity=N3],Fei Shen,Dalton Trans.,2019,18.81948,-6.045663,18.673359,-9.887041,160.0
+ADEJOK,"F(3,1)",7,3,1,1x[C10N2],K.Wieghardt,Eur.J.Inorg.Chem.,2012,55.374661,-5.310361,19.515925,26.560877,
+CODZUS,"F(3,1)",7,3,1,1x[C10N2],C.Glidewell,"Acta Crystallogr.,Sect.C:Cryst.Struct.Chem.",2014,52.661154,-5.297201,20.08925,23.287205,
+ECAKUP,"F(3,1)",7,3,1,1x[C10N2],P.Turner,Proc.Nat.Acad.Sci.USA,2006,54.418926,-5.261554,20.369247,24.800627,
+IRUSAQ,"F(3,1)",7,3,1,1x[C10N2],C.Janiak,Dalton Trans.,2011,57.574568,-5.519745,22.643048,25.424276,
+IRUSEU,"F(3,1)",7,3,1,1x[C10N2],C.Janiak,Dalton Trans.,2011,55.993885,-5.30207,20.857941,25.846375,
+MAGYEZ,"F(3,1)",7,3,1,1x[C10N2],Huai-Ming Hu,Z.Anorg.Allg.Chem.,2004,56.107622,-5.615339,21.155695,25.34909,
+POLXEV,"F(3,1)",7,3,1,1x[C10N2],M.-L.Boillot,New J.Chem.,2015,52.069261,-7.72283,11.202207,29.156726,
+RISSUI,"F(3,2)",5,3,2,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N2],C.Guran,"Acta Crystallogr.,Sect.E:Struct.Rep.Online",2008,31.829569,-5.585875,20.374525,1.881671,321.0
+TORMIY,"F(3,2)",5,3,2,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N2],Zai-Jun Li,Wuji Huaxue Xuebao(Chin.)(Chin.J.Inorg.Chem.),2014,45.047965,-6.342827,19.850162,14.867477,479.0
+UMOSIB,"F(3,2)",5,3,2,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N2],J.C.Gordon,Energy Storage Materials,2021,52.503046,-6.615736,21.846819,20.052993,
+VURLAY,"F(3,2)",5,3,2,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N2],S.O.Ojwach,Catal.Lett,2020,46.243381,-6.582309,20.224574,15.448999,483.0
+XEWHOY,"F(3,2)",5,3,2,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N2],Zaijun Li,Polyhedron,2013,39.739571,-6.453925,18.428566,10.869581,439.0
+APAFEH,"F(3,3)",1,3,3,hybrid[scaffold=1x[C5N];sites=C5N:donors=1:distance=1;eff. connectivity=N3],C.E.Strouse,Inorg.Chem.,1980,13.478583,-5.648425,17.934041,-14.091381,78.0
+WEPDED,"F(3,4)",1,3,4,2x[C3N2],R.Lescouezec,Eur.J.Inorg.Chem.,2018,17.688861,-4.226539,21.39674,-11.921917,152.0
+GETSAC,"F(3,5)",1,3,5,1x[C14N4],M.Shatruk,Inorg.Chem.,2018,26.746601,-3.268816,18.949467,0.540819,306.0
+SEGWOS,"F(3,6)",1,3,6,1x[C6N4],Bao-Hui Ye,CrystEngComm,2012,8.306453,-3.541525,19.90719,-19.129761,
+ACAHUJ,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],P.E.Kruger,Dalton Trans.,2012,4.147818,-4.751979,21.45629,-26.047949,
+BAKGUR,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],M.Kojima,Dalton Trans.,2011,10.62133,-6.583004,26.959009,-26.908182,
+BAXJUI,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],Zhi-Guo Gu,Dalton Trans.,2017,21.190701,-5.109489,15.949263,-3.85555,240.0
+DUDSAZ,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],Zhi-Guo Gu,Wuji Huaxue Xuebao(Chin.)(Chin.J.Inorg.Chem.),2019,23.309086,-5.028365,13.271656,1.021566,316.0
+FULXER,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],Zai-Jun Li,Wuji Huaxue Xuebao(Chin.)(Chin.J.Inorg.Chem.),2015,23.544016,-4.742503,17.792543,-2.978529,257.0
+IJEBEG,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],Zaijun Li,Dalton Trans.,2016,21.363196,-5.186301,17.054804,-4.865407,228.0
+ODICAG,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],S.Iijima,Chem.Lett.,2007,-3.498321,-5.388688,16.330736,-29.205244,
+QIXCIM,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],D.J.Harding,Crystals,2019,12.801834,-4.0579,15.212933,-10.456497,121.0
+RANCUG,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],M.Kojima,Inorg.Chem.,2011,21.898798,-6.440087,28.261532,-16.790318,133.0
+RANDAN,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],M.Kojima,Inorg.Chem.,2011,17.738457,-5.82648,27.130013,-19.205534,97.0
+XUGCEJ,"F(4,1)",11,4,1,hybrid[scaffold=1x[C3N2];sites=C3N2:donors=1:distance=1;eff. connectivity=N2],Zhi-Guo Gu,Inorg.Chem.Commun.,2015,22.945139,-5.380095,17.909836,-4.33229,239.0
+CATWIG,"F(4,2)",3,4,2,1x[C8N4],M.Shatruk,J.Am.Chem.Soc.,2017,-42.609243,-1.648058,17.28322,-65.528019,
+NENTAB,"F(4,2)",3,4,2,1x[C8N4],J.Reedijk,J.Chem.Cryst.,2000,48.775571,-5.069492,19.712216,20.006365,
+QOSNIW,"F(4,2)",3,4,2,1x[C8N4],M.P.Shores,J.Am.Chem.Soc.,2009,11.544193,-3.720719,16.919856,-13.08388,96.0
+FEBMAB,"F(4,3)",2,4,3,acyclic[NCCN;degrees=N3.N3],Jin-Shun Huang,Inorg.Chem.Commun.,2005,-13.478399,-7.476763,17.658979,-42.601639,
+TIYPIC,"F(4,3)",2,4,3,acyclic[NCCN;degrees=N3.N3],M.Kato,J.Am.Chem.Soc.,2013,-29.619134,-5.811769,11.039527,-50.457928,
+JOWGEH,"F(4,4)",2,4,4,acyclic[NCCN;degrees=N2.N2],D.R.Russell,Inorg.Chem.,1992,67.576673,-8.32702,25.426519,29.835636,
+NUWGAO,"F(4,4)",2,4,4,acyclic[NCCN;degrees=N2.N2],I.-P.Lorenz,"Z.Naturforsch.,B:Chem.Sci.",2010,65.210284,-6.255398,19.384766,35.582621,

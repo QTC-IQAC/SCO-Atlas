@@ -1,0 +1,13 @@
+Refcode,family_id,family_count,grid_row,grid_column,Core-ring family,last_author,journal,year,dHelec [kJ/mol],dHvib [kJ/mol],dSvibT [kJ/mol],dGtot [kJ/mol],T1/2 [K]
+RAPXOY,"F(1,1)",1,1,1,acyclic[CCN;degrees=N1],J.R.Nitschke,Chemical Science,2013,22.562997,-1.429609,28.130954,-10.985064,189.0
+AXAKIT,"F(1,2)",2,1,2,1x[C3N2],Kui Jiao,Jiegou Huaxue(Chin.)(Chin.J.Struct.Chem.),2004,-9.912839,-4.865557,25.693147,-44.45904,
+MENTEF,"F(1,2)",2,1,2,1x[C3N2],B.Becker,"Acta Crystallogr.,Sect.E:Struct.Rep.Online",2006,-8.536683,-4.72648,22.894609,-40.145271,
+GOGSAZ,"F(1,3)",2,1,3,1x[C2N3],K.Boukheddaden,Chemical Science,2019,39.140589,-5.48212,22.154259,7.516713,383.0
+HIPXOW,"F(1,3)",2,1,3,1x[C2N3],J.Stierstorfer,Chem.-Eur.J.,2019,18.78212,-5.455274,29.856137,-20.51679,104.0
+IVIBAT,"F(2,1)",7,2,1,1x[CN4],J.Stierstorfer,New J.Chem.,2021,38.35118,-5.103839,31.111881,-1.852038,283.0
+JANSAS,"F(2,1)",7,2,1,1x[CN4],P.Gutlich,J.Appl.Crystallogr.,2004,38.894816,-5.293534,37.197463,-7.583678,243.0
+NAKFUE,"F(2,1)",7,2,1,1x[CN4],P.Weinberger,Dalton Trans.,2020,39.397783,-5.291336,32.129322,-2.010372,282.0
+PEJQIF,"F(2,1)",7,2,1,1x[CN4],H.Schenk,Chem.-Eur.J.,2006,21.807825,-4.64285,16.206281,-3.028804,253.0
+SIDMEA,"F(2,1)",7,2,1,1x[CN4],J.Stierstorfer,J.Mater.Chem.A,2018,7.805323,-4.144826,26.062299,-26.3893,
+YAGYUB,"F(2,1)",7,2,1,1x[CN4],J.G.Haasnoot,"Acta Crystallogr.,Sect.B:Struct.Sci.",2004,37.119401,-5.334535,29.469133,-1.671765,284.0
+YEQKIR,"F(2,1)",7,2,1,1x[CN4],Yann Garcia,Eur.J.Inorg.Chem.,2018,38.539612,-5.299734,31.739818,-2.487438,278.0

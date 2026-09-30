@@ -4,7 +4,11 @@ __pycache__/
 .ipynb_checkpoints
 Data/
 Database_95SCO_Kulik
-Figures/
+Analysis/*/Figures/*
+!Analysis/*/Figures/HTML/
+!Analysis/*/Figures/HTML/*.html
+!Analysis/*/Figures/HTML/*.csv
+!Analysis/*/Figures/HTML/README.md
 Manuscript*/
 Literature/
 Notes/
