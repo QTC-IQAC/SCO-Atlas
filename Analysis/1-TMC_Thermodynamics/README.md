@@ -1,6 +1,6 @@
 # 1 - TMC Thermodynamics
 
-This analysis layer describes the gas-phase thermodynamics of the SCO
+This analysis describes the gas-phase thermodynamics of the SCO
 ATLAS and supports the accompanying manuscript. It reads SCOPE `System` objects
 from the external ATLAS data, and executes the analyses discussed in the manuscript
 
@@ -64,12 +64,12 @@ The current correspondence with the main manuscript is:
 
 | Notebook | Main role | Main-text section(s) |
 | --- | --- | --- |
-| `0-Prepare_Systems.ipynb` | System preparation, completion checks, structural filtering, and representative selection | 2.1, Dataset Construction; 3.1, Dataset Analysis |
-| `1-Crystal_Breakdown.ipynb` | Crystal and calculation-status composition | 3.1, Dataset Analysis |
-| `2-Bibliographic_Data.ipynb` | Bibliographic provenance and publication coverage | 3.1, Dataset Analysis |
+| `0-Prepare_Systems.ipynb` | System preparation and structural filtering | 2.1, Dataset Construction; 3.1, Dataset Analysis |
+| `1-Crystal_Breakdown.ipynb` | Crystal composition | 3.1, Dataset Analysis |
+| `2-Bibliographic_Data.ipynb` | Bibliographic provenance | 3.1, Dataset Analysis |
 | `3-Thermodynamics.ipynb` | Thermodynamic terms, transition temperatures, and frequency-resolved contributions | 2.2-2.3, Thermodynamic Framework and Computational Details; 3.2, Thermodynamics of the Spin Transition |
 | `4-Ligand_Composition.ipynb` | Ligand descriptors, interactive family maps, and family-resolved statistics | 2.5, Ligand-composition Split and Mapping; 3.4, Ligand Families Guide Thermodynamics |
-| `5-Structural_Correlations.ipynb` | Structure-property correlations and ligand-family structural ranges | 3.5, Structure-Property Correlations |
+| `5-Structural_Correlations.ipynb` | Structure-property correlations | 3.5, Structure-Property Correlations |
 | `6-VNM_Analysis.ipynb` | Normal-mode mapping and group-resolved vibrational analysis | 2.4, Vibrational Normal-Mode Mapping and Analysis; 3.3, Vibrational Origin of the Denticity Dependence |
 
 ### Diagnostic Notebooks
