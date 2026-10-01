@@ -35,9 +35,9 @@ and are not versioned. `Analysis/1-TMC_Thermodynamics/Figures/HTML/` is the
 exception: it contains the configurable ligand maps and their associated CSV
 tables, which are included in the repository for direct exploration.
 
-## Data Store
+## ATLAS Data Organization
 
-The external data store is expected to have the following structure:
+The external data is expected to have the following structure:
 
 ```text
 ATLAS/
@@ -47,8 +47,6 @@ ATLAS/
     ├── 3-Computations/
     │   └── <system>/
     │       ├── isolated/   Gas-phase molecular calculations
-    ├── *.scope             SCOPE workflow definitions
-    └── *.py                Workflow execution scripts
 ```
 
 Each file under `Data/2-Systems/<system>/` links the corresponding sources,
