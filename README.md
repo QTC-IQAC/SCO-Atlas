@@ -1,4 +1,4 @@
-# SCO ATLAS Analysis: 
+# SCO ATLAS Analysis 
 
 ## Layer 1: TMC_Thermodynamics
 
@@ -64,7 +64,7 @@ archives are provided in `ATLAS/README.md`.
 - SCOPE 0.9.6, including the core and SCO packages importable as `scope` and `scope_sco`.
 - The complete ATLAS
 
-Check the installed SCOPE version with:
+If you're unsure, you can check the installed SCOPE version with:
 
 ```bash
 python -c "import scope; print(scope.__version__)"
