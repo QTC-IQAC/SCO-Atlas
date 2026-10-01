@@ -1,4 +1,6 @@
-# SCO ATLAS Analysis: 1-TMC_Thermodynamics
+# SCO ATLAS Analysis: 
+
+## Layer 1: TMC_Thermodynamics
 
 This repository contains the analysis notebooks, derived outputs, figures,
 and manuscript associated with the **SCO ATLAS**. The ATLAS is a collection of
