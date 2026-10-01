@@ -15,8 +15,8 @@ which contains gas-phase HS and LS calculations.
 ## Repository Structure
 
 ```text
-SCO-Atlas/
-├── Analysis/              Analysis of the ATLAS
+SCO-Atlas/                 This Repository
+├── Analysis/              Folder where analyses are stored and organized
 │   ├── README.md      
 │   └── 1-TMC_Thermodynamics/
 │       ├── Bibliography/  Bibliographic lookup and retrieval utilities
