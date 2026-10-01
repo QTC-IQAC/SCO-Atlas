@@ -24,7 +24,7 @@
 
 - Current analysis layer: `Analysis/1-TMC_Thermodynamics/`.
 - Analysis notebooks: `Analysis/1-TMC_Thermodynamics/Notebooks/`.
-- Shared notebook helpers: `Analysis/1-TMC_Thermodynamics/Notebooks/atlas_functions.py`.
+- Layer-specific notebook helpers: `Analysis/1-TMC_Thermodynamics/Notebooks/local_functions.py`.
 - Derived tables and CSV files: `Analysis/1-TMC_Thermodynamics/Outputs/`.
 - Bibliographic tools and journal data: `Analysis/1-TMC_Thermodynamics/Bibliography/`.
 - Local figures: `Analysis/1-TMC_Thermodynamics/Figures/`.
@@ -43,13 +43,12 @@ The standard analysis sequence is:
 4-Ligand_Composition.ipynb
 5-Structural_Correlations.ipynb
 6-VNM_Analysis.ipynb
-7-Finalize_ATLAS.ipynb
 ```
 
-Files beginning with `X-` are diagnostic or exploratory notebooks. Some of them
-are computationally expensive; inspect them before executing cells. In
-particular, rebuilding the full HO/QRRHO comparison in `X-Test_HO.ipynb` takes
-approximately 42 minutes.
+Files beginning with `D-` are focused diagnostic notebooks and are not required
+for the production sequence. Local exploratory notebooks beginning with `X-`
+are ignored by Git; inspect them before executing cells because some analyses
+are computationally expensive.
 
 ## External Data Structure
 
@@ -79,7 +78,7 @@ The data-store release and branch-compression instructions live in
 ## Working Conventions
 
 - Preserve the numbered, readable notebook workflow. Put reusable or complex
-  helpers in `atlas_functions.py`, but keep short analysis loops visible in the
+  layer-specific helpers in `local_functions.py`, but keep short analysis loops visible in the
   notebooks.
 - Avoid pandas and `pathlib.Path` in the analysis notebooks unless a task
   specifically requires them; prefer `csv`, ordinary dictionaries, and string

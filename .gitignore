@@ -21,3 +21,6 @@ Tests/
 *.xlsx
 *.docx
 *.py[cod]
+
+# Test Notebooks
+X-*.ipynb

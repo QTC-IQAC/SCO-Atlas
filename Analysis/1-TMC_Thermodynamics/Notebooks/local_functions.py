@@ -3,9 +3,7 @@ import json
 import math
 import os
 import re
-from ast import literal_eval
 from collections import Counter, deque
-from copy import deepcopy
 from html import escape
 from pathlib import Path
 
@@ -17,7 +15,6 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize, to_hex
 from matplotlib.ticker import MaxNLocator
 from rdkit import Chem, RDLogger
 from rdkit.Chem import Draw, rdMolDescriptors
-from scope.classes_data import Data
 from scope.operations.graphs import compute_topological_distances
 from scope.thermodynamics import get_Hvib, get_Svib
 
@@ -2807,144 +2804,3 @@ def as_float(value):
 def get_last_author(authors):
     author_parts = [part.strip() for part in str(authors).split(';') if part.strip()]
     return author_parts[-1] if author_parts else 'unknown'
-
-################################
-#### ATLAS Result Finalization ##
-################################
-def parse_atlas_result_value(value, value_type='float'):
-    """Normalize a CSV value before storing it in a SCOPE Data object."""
-    if value is None or str(value).strip().lower() in ('', 'none', 'nan', '-'):
-        return None
-
-    if value_type == 'str':
-        return str(value).strip()
-    if value_type == 'bool':
-        if isinstance(value, bool):
-            return value
-        normalized = str(value).strip().lower()
-        if normalized in ('true', '1', 'yes'):
-            return True
-        if normalized in ('false', '0', 'no'):
-            return False
-        raise ValueError(f"Cannot interpret {value!r} as a boolean")
-
-    parsed = value
-    if isinstance(value, str):
-        try:
-            parsed = literal_eval(value.strip())
-        except (SyntaxError, ValueError):
-            parsed = value.strip()
-    if isinstance(parsed, (list, tuple, np.ndarray)):
-        if len(parsed) != 1:
-            raise ValueError(f"Expected one scalar value, received {parsed!r}")
-        parsed = parsed[0]
-
-    if value_type == 'float':
-        return float(parsed)
-    if value_type == 'int':
-        return int(parsed)
-    raise ValueError(f"Unsupported ATLAS result value type: {value_type!r}")
-
-def create_atlas_data(
-    key,
-    value,
-    units,
-    atlas_release,
-    entry_refcode,
-    canonical_refcode,
-    inherited,
-    source_table,
-    source_column,
-    temperature=None,
-):
-    """Create a standard SCOPE Data object with ATLAS provenance metadata."""
-    result = Data(
-        key=key,
-        value=value,
-        units=units,
-        function='atlas_functions.register_atlas_row_results',
-        notes='Curated SCO ATLAS core result',
-    )
-    result.atlas_release = atlas_release
-    result.entry_refcode = entry_refcode
-    result.canonical_refcode = canonical_refcode
-    result.inherited = bool(inherited)
-    result.source_table = source_table
-    result.source_column = source_column
-    if temperature is not None:
-        result.temperature = float(temperature)
-    result.provenance = {
-        'atlas_release': atlas_release,
-        'entry_refcode': entry_refcode,
-        'canonical_refcode': canonical_refcode,
-        'inherited': bool(inherited),
-        'source_table': source_table,
-        'source_column': source_column,
-    }
-    if temperature is not None:
-        result.provenance['temperature'] = float(temperature)
-    return result
-
-def register_atlas_row_results(
-    branch,
-    row,
-    schema,
-    atlas_release,
-    entry_refcode,
-    canonical_refcode,
-    source_table,
-    inherited=False,
-    overwrite=False,
-):
-    """Register selected CSV columns as curated branch-level ATLAS results."""
-    registered_keys = []
-    for specification in schema:
-        column = specification['column']
-        if column not in row:
-            raise KeyError(f"Column {column!r} is missing from {source_table}")
-        value = parse_atlas_result_value(
-            row[column],
-            value_type=specification.get('value_type', 'float'),
-        )
-        result = create_atlas_data(
-            key=specification['key'],
-            value=value,
-            units=specification.get('units', ''),
-            atlas_release=atlas_release,
-            entry_refcode=entry_refcode,
-            canonical_refcode=canonical_refcode,
-            inherited=inherited,
-            source_table=source_table,
-            source_column=column,
-            temperature=specification.get('temperature'),
-        )
-        branch.add_result(result, overwrite=overwrite)
-        registered_keys.append(result.key)
-    return registered_keys
-
-def copy_atlas_results(
-    source_branch,
-    target_branch,
-    entry_refcode,
-    canonical_refcode,
-    prefix='atlas_',
-    overwrite=False,
-):
-    """Copy only curated ATLAS results while retaining representative provenance."""
-    copied_keys = []
-    for key, result in source_branch.results.items():
-        if not key.startswith(prefix):
-            continue
-        copied = deepcopy(result)
-        copied.entry_refcode = entry_refcode
-        copied.canonical_refcode = canonical_refcode
-        copied.inherited = True
-        copied.provenance = dict(getattr(copied, 'provenance', {}))
-        copied.provenance.update({
-            'entry_refcode': entry_refcode,
-            'canonical_refcode': canonical_refcode,
-            'inherited': True,
-        })
-        target_branch.add_result(copied, overwrite=overwrite)
-        copied_keys.append(key)
-    return copied_keys
