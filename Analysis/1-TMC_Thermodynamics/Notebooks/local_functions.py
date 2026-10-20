@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import xml.etree.ElementTree as ET
 from collections import Counter, deque
 from html import escape
 from pathlib import Path
@@ -106,6 +107,91 @@ def write_csv_rows(path, rows, fieldnames=None):
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
         writer.writeheader()
         writer.writerows(rows)
+
+def electronic_gap_comparison_row(system, thermodynamic, structural, threshold=50.0):
+    """Combine stored energies and structures with reference-molecule chemistry."""
+    found, molecule = system.find_source('ref_hs_mol')
+    if not found:
+        raise ValueError(f'{system.refcode}: missing HS reference molecule')
+    energy = float(thermodynamic['dHelec[kJ/mol]'])
+    energy_group = 'within window'
+    if energy < -threshold:
+        energy_group = 'negative extreme'
+    elif energy > threshold:
+        energy_group = 'positive extreme'
+
+    ligand_compositions = [Counter(ligand.labels) for ligand in molecule.ligands]
+    row = {
+        'refcode': system.refcode_wo_digits,
+        'dHelec[kJ/mol]': energy,
+        'Energy Group': energy_group,
+        'homoleptic': str(thermodynamic['homoleptic']).lower() == 'true',
+        'denticity': thermodynamic['denticity'],
+        'Molecular Formula': molecule.formula,
+        'Num Atoms': len(molecule.labels),
+        'Num Heavy Atoms': sum(label != 'H' for label in molecule.labels),
+        'Molecular Charge': getattr(molecule, 'charge', getattr(molecule, 'total_charge', None)),
+        'Ligand Formulae': '; '.join(dict.fromkeys(ligand.formula for ligand in molecule.ligands)),
+        'Ligand SMILES': '; '.join(dict.fromkeys(getattr(ligand, 'smiles', '') for ligand in molecule.ligands)),
+        'Has Thiocyanate': Counter({'C': 1, 'N': 1, 'S': 1}) in ligand_compositions,
+        'Has Dicyanamide': Counter({'C': 2, 'N': 3}) in ligand_compositions,
+        'Has Unsubstituted Phthalocyanine': Counter({'C': 32, 'H': 16, 'N': 8}) in ligand_compositions,
+        'Has B2N4O4 Dioxime Ligand': any(
+            atoms['B'] == 2 and atoms['N'] == 4 and atoms['O'] == 4
+            for atoms in ligand_compositions
+        ),
+    }
+    for source, target in [
+        ('HS_dFeN', 'HS dFeN [Angstrom]'),
+        ('LS_dFeN', 'LS dFeN [Angstrom]'),
+        ('HS_Sigma', 'HS Sigma [deg]'),
+        ('LS_Sigma', 'LS Sigma [deg]'),
+        ('HS_CShM', 'HS CShM'),
+        ('LS_CShM', 'LS CShM'),
+    ]:
+        row[target] = first_float(structural.get(source))
+    return row
+
+
+def write_electronic_gap_extremes_table(rows, output_path, count=10):
+    """Export both ends of the electronic-gap distribution with structural context."""
+    ordered = sorted(rows, key=lambda row: float(row['dHelec[kJ/mol]']))
+    if len(ordered) < 2 * count:
+        raise ValueError('Not enough compounds to list distinct negative and positive extremes')
+    lines = [
+        r'\begin{table}[H]',
+        r'\centering',
+        r'\small',
+        r'\setlength{\tabcolsep}{4pt}',
+        rf'\caption{{The {count} most negative and {count} most positive electronic HS--LS energy gaps among the {len(ordered)} retained TMCs. Hom. and Het. denote homoleptic and heteroleptic complexes; $d$ is the ligand denticity for homoleptic complexes. $N_{{\mathrm{{atoms}}}}$ includes all atoms, including H, of the isolated TMC, excluding counterions and solvent. Energies are in kJ mol$^{{-1}}$, Fe--N distances in \AA{{}} and $\Sigma$ values in degrees. Selection is based solely on the electronic-energy ranking, without additional exclusion.}}',
+        r'\label{tab:electronic-gap-extremes}',
+        r'\begin{tabular}{@{}llrrrrrrr@{}}',
+        r'\toprule',
+        r'Refcode & Class & $d$ & $N_{\mathrm{atoms}}$ & $\Delta H_{\mathrm{elec}}$ & $d_{\mathrm{FeN}}^{\mathrm{HS}}$ & $d_{\mathrm{FeN}}^{\mathrm{LS}}$ & $\Sigma^{\mathrm{HS}}$ & $\Sigma^{\mathrm{LS}}$ \\',
+        r'\midrule',
+    ]
+    for title, selected in [
+        ('Most negative gaps', ordered[:count]),
+        ('Most positive gaps', list(reversed(ordered[-count:]))),
+    ]:
+        if title == 'Most positive gaps':
+            lines.append(r'\midrule')
+        lines.append(r'\multicolumn{9}{l}{\textit{' + title + r'}} \\')
+        for row in selected:
+            homoleptic = str(row['homoleptic']).lower() == 'true'
+            cells = [row['refcode'], 'Hom.' if homoleptic else 'Het.', str(row['denticity']) if homoleptic else '--']
+            for key, digits in [
+                ('Num Atoms', 0), ('dHelec[kJ/mol]', 2),
+                ('HS dFeN [Angstrom]', 3), ('LS dFeN [Angstrom]', 3),
+                ('HS Sigma [deg]', 1), ('LS Sigma [deg]', 1),
+            ]:
+                value = as_float(row[key])
+                cells.append('--' if value is None else f'{value:.{digits}f}')
+            lines.append(' & '.join(cells) + r' \\')
+    lines.extend([r'\bottomrule', r'\end{tabular}', r'\end{table}'])
+    with open(output_path, 'w') as handle:
+        handle.write('\n'.join(lines) + '\n')
+
 
 def sanitize_filename(text):
     text = str(text).strip().replace('1/2', '12').replace('/', '_').replace('\\', '_')
@@ -861,7 +947,73 @@ def draw_correlation_panel(ax, spec, rows, plot_groups):
         spine.set_linewidth(1.0)
     return ax.get_legend_handles_labels()
 
-def build_family_structural_data(rows, membership_rows, statistics_rows):
+def write_strong_structural_correlations_table(table, output_path, min_abs_pearson=0.7):
+    """Export a nonredundant correlation selection as a manuscript ESI table."""
+    target_labels = {
+        'dHelec': r'$\Delta H_{\mathrm{elec}}$',
+        'dHvib': r'$\Delta H_{\mathrm{vib}}$',
+        'dSvib': r'$\Delta S_{\mathrm{vib}}$',
+        'dGtot': r'$\Delta G_{\mathrm{tot}}$',
+        'T12': r'$T_{1/2}$',
+    }
+    feature_labels = {
+        'HS_FeN': r'$d_{\mathrm{FeN}}^{\mathrm{HS}}$',
+        'LS_FeN': r'$d_{\mathrm{FeN}}^{\mathrm{LS}}$',
+        'dFeN': r'$\Delta d_{\mathrm{FeN}}$',
+        'HS_Sigma': r'$\Sigma^{\mathrm{HS}}$',
+        'LS_Sigma': r'$\Sigma^{\mathrm{LS}}$',
+        'dSigma': r'$\Delta\Sigma$',
+        'HS_CShM': r'$\mathrm{CShM}^{\mathrm{HS}}$',
+        'LS_CShM': r'$\mathrm{CShM}^{\mathrm{LS}}$',
+        'dCShM': r'$\Delta\mathrm{CShM}$',
+        'HS_FCS_CH': r'$V_{\mathrm{FCS}}^{\mathrm{HS}}$',
+        'LS_FCS_CH': r'$V_{\mathrm{FCS}}^{\mathrm{LS}}$',
+        'dFCS_CH': r'$\Delta V_{\mathrm{FCS}}$',
+        'rel_dFCS_CH': r'$\Delta V_{\mathrm{FCS}}/V_{\mathrm{FCS}}^{\mathrm{LS}}$',
+    }
+    group_labels = {'overall': 'All systems', 'homoleptic': 'Homoleptic', 'heteroleptic': 'Heteroleptic'}
+    lines = [
+        r'\begingroup',
+        r'\small',
+        r'\setlength{\tabcolsep}{7pt}',
+        r'\begin{longtable}{@{}lllrr@{}}',
+        rf'\caption{{Structure--thermodynamic correlations with $|r|>{min_abs_pearson:g}$ across the complete dataset, composition classes and homoleptic denticity subsets. Signed HS--LS differences are reported instead of their absolute values to avoid duplicate representations of the same structural change. Selection uses unrounded coefficients; $r$ is displayed to three decimal places. $N$ is the number of systems with both quantities available.}}\label{{tab:strong-structural-correlations}}\\',
+        r'\toprule',
+        r'Thermodynamic term & Structural parameter & Subset & $r$ & $N$ \\',
+        r'\midrule',
+        r'\endfirsthead',
+        r'\multicolumn{5}{l}{\tablename~\thetable{} (continued)}\\',
+        r'\toprule',
+        r'Thermodynamic term & Structural parameter & Subset & $r$ & $N$ \\',
+        r'\midrule',
+        r'\endhead',
+        r'\midrule',
+        r'\multicolumn{5}{r}{Continued on next page}\\',
+        r'\endfoot',
+        r'\bottomrule',
+        r'\endlastfoot',
+    ]
+    previous_target = None
+    for row in table:
+        if row['target'] != previous_target and previous_target is not None:
+            lines.append(r'\midrule')
+        previous_target = row['target']
+        group = row['group']
+        if group.startswith('dent='):
+            group_label = f"$d={group.split('=', 1)[1]}$"
+        else:
+            group_label = group_labels[group]
+        lines.append(
+            f"{target_labels[row['target']]} & {feature_labels[row['feature']]} & "
+            f"{group_label} & ${row['r']:.3f}$ & {row['n']} " + r'\\'
+        )
+    lines.extend([r'\end{longtable}', r'\endgroup'])
+    with open(output_path, 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
+def build_family_structural_data(rows, membership_rows, statistics_rows, motif_names=None):
+    motif_names = motif_names or {}
     structural_by_id = {base_refcode(row['id']): row for row in rows}
     statistics_by_family = {
         (str(row['Denticity']), row['Family']): row for row in statistics_rows
@@ -877,15 +1029,20 @@ def build_family_structural_data(rows, membership_rows, statistics_rows):
             continue
         denticity = str(membership['Denticity'])
         family = membership['Family']
+        motif = motif_names.get((int(float(denticity)), family), '')
+        family_label = f'd={int(float(denticity))}, {family}'
+        if motif:
+            family_label = f'{motif} \u2014 {family_label}'
         family_structural_rows.append({
             'id': refcode,
             'Denticity': int(float(denticity)),
             'Family': family,
-            'Family Label': f'd={int(float(denticity))}, {family}',
+            'Chemical Motif': motif,
+            'Family Label': family_label,
             'HS_FeN': structural['HS_FeN'],
-            'HS_Epsylon': structural['HS_Epsylon'],
+            'HS_Sigma': structural['HS_Sigma'],
             'LS_FeN': structural['LS_FeN'],
-            'LS_Epsylon': structural['LS_Epsylon'],
+            'LS_Sigma': structural['LS_Sigma'],
         })
 
     grouped_rows = {}
@@ -898,18 +1055,193 @@ def build_family_structural_data(rows, membership_rows, statistics_rows):
         record = {
             'Denticity': int(denticity),
             'Family': family,
+            'Chemical Motif': family_rows[0]['Chemical Motif'],
             'Num Main-Distribution Entries': len(family_rows),
             'dHelec Base [kJ/mol]': float(electronic['dHelec Base [kJ/mol]']),
             'dHelec Width [kJ/mol]': float(electronic['dHelec Width [kJ/mol]']),
         }
         for state in ['HS', 'LS']:
-            for parameter, label, unit in [('FeN', 'dFeN', 'Angstrom'), ('Epsylon', 'Sigma', 'deg')]:
+            for parameter, label, unit in [('FeN', 'dFeN', 'Angstrom'), ('Sigma', 'Sigma', 'deg')]:
                 values = np.asarray([row[f'{state}_{parameter}'] for row in family_rows], dtype=float)
                 record[f'{state} {label} Median [{unit}]'] = float(np.median(values))
                 record[f'{state} {label} IQR [{unit}]'] = float(np.quantile(values, 0.75) - np.quantile(values, 0.25))
         family_structural_statistics.append(record)
 
     return family_structural_rows, family_structural_statistics
+
+def build_family_structure_thermo_correlations(rows, family_rows, targets, features):
+    """Correlate stored structures and thermodynamics within each selected family."""
+    by_id = {base_refcode(row['id']): row for row in rows}
+    grouped = {}
+    seen = set()
+    for member in family_rows:
+        refcode = base_refcode(member['id'])
+        if refcode in seen:
+            raise ValueError(f'Duplicate family member: {refcode}')
+        if refcode not in by_id:
+            raise ValueError(f'Missing structure/thermodynamics for family member: {refcode}')
+        seen.add(refcode)
+        key = (member['Denticity'], member['Family'], member['Family Label'], member.get('Chemical Motif', ''))
+        grouped.setdefault(key, []).append(by_id[refcode])
+
+    table = []
+    for (denticity, family, label, motif), subset in grouped.items():
+        for target in targets:
+            for feature in features:
+                correlation, num_entries = pearson_correlation(subset, feature, target)
+                table.append({
+                    'denticity': denticity,
+                    'family': family,
+                    'motif': motif,
+                    'group': label,
+                    'family_n': len(subset),
+                    'target': target,
+                    'feature': feature,
+                    'r': correlation,
+                    'n': num_entries,
+                })
+    return table
+
+
+def write_family_structural_correlations_table(table, output_path):
+    """Summarize the three discussed relationships within selected ligand families."""
+    families = list(dict.fromkeys(row['group'] for row in table))
+    relationships = [('HS_FeN', 'dHelec'), ('dFeN', 'dHvib'), ('rel_dFCS_CH', 'dSvib')]
+    lines = [
+        r'\begin{table}[htbp]',
+        r'\centering',
+        r'\small',
+        r'\setlength{\tabcolsep}{4pt}',
+        r'\caption{Within-family Pearson correlations for the 119 main-distribution members of eight ligand families. Columns report $d_{\mathrm{FeN}}^{\mathrm{HS}}$ versus $\Delta H_{\mathrm{elec}}$, $\Delta d_{\mathrm{FeN}}$ versus $\Delta H_{\mathrm{vib}}$, and $\Delta V_{\mathrm{FCS}}/V_{\mathrm{FCS}}^{\mathrm{LS}}$ versus $\Delta S_{\mathrm{vib}}$. $N$ is the number of systems in each selected family distribution; all three correlations use these same members. No further outlier removal is applied.}',
+        r'\label{tab:family-structural-correlations}',
+        r'\begin{tabular}{@{}llrrrrr@{}}',
+        r'\toprule',
+        r'Motif & Family & $d$ & $N$ & Electronic $r$ & Vib. enthalpy $r$ & Vib. entropy $r$ \\',
+        r'\midrule',
+    ]
+    for family in families:
+        family_table = [row for row in table if row['group'] == family]
+        first = family_table[0]
+        cells = [first.get('motif', '') or '--', first['family'], str(first['denticity']), str(first['family_n'])]
+        for feature, target in relationships:
+            result = next(row for row in family_table if row['feature'] == feature and row['target'] == target)
+            if result['n'] != first['family_n']:
+                raise ValueError(f'Missing paired data for {family}: {feature} vs {target}')
+            cells.append('--' if result['r'] is None else f"${result['r']:.2f}$")
+        lines.append(' & '.join(cells) + r' \\')
+    lines.extend([r'\bottomrule', r'\end{tabular}', r'\end{table}'])
+    with open(output_path, 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
+def build_family_structural_pca(rows, family_rows, parameters):
+    """Fit separate standardized HS/LS PCAs to the same selected family members."""
+    if len(family_rows) < 3 or len(parameters) < 2:
+        raise ValueError('Structural PCA requires at least three systems and two descriptors')
+    structural_by_id = {base_refcode(row['id']): row for row in rows}
+    coordinate_rows = []
+    loading_rows = []
+    explained_variance = {}
+
+    for state in ['HS', 'LS']:
+        features = [f'{state}_{parameter}' for parameter in parameters]
+        matrix = np.asarray([
+            [structural_by_id[base_refcode(member['id'])][feature] for feature in features]
+            for member in family_rows
+        ], dtype=float)
+        invalid = ~np.isfinite(matrix).all(axis=1)
+        if invalid.any():
+            refcodes = [member['id'] for member, missing in zip(family_rows, invalid) if missing]
+            raise ValueError(f'Missing or nonfinite {state} descriptors for: {refcodes}')
+
+        means = matrix.mean(axis=0)
+        deviations = matrix.std(axis=0)
+        scales = np.where(deviations > 0, deviations, 1.0)
+        standardized = (matrix - means) / scales
+        total_variance = np.sum(standardized ** 2)
+        if total_variance == 0:
+            raise ValueError(f'All selected {state} descriptors are constant')
+        coordinates, model = pca_projection(standardized, n_components=2)
+        components = model['components']
+
+        # Fix arbitrary PCA signs so the dominant coefficient of each axis is positive.
+        for component_index, component in enumerate(components):
+            if component[np.argmax(np.abs(component))] < 0:
+                components[component_index] *= -1
+                coordinates[:, component_index] *= -1
+
+        variance = model['singular_values'] ** 2 / total_variance
+        explained_variance[state] = variance
+        for member, point in zip(family_rows, coordinates):
+            coordinate_rows.append({
+                'refcode': base_refcode(member['id']),
+                'Denticity': member['Denticity'],
+                'Family': member['Family'],
+                'Chemical Motif': member.get('Chemical Motif', ''),
+                'Family Label': member['Family Label'],
+                'Spin State': state,
+                'PC1': float(point[0]),
+                'PC2': float(point[1]),
+            })
+        for index, feature in enumerate(features):
+            loading_rows.append({
+                'Spin State': state,
+                'structural parameter': feature,
+                'PC1 coefficient': float(components[0, index]),
+                'PC2 coefficient': float(components[1, index]),
+                'Descriptor mean [original units]': float(means[index]),
+                'Descriptor standard deviation [original units]': float(deviations[index]),
+                'PC1 explained variance [%]': float(100 * variance[0]),
+                'PC2 explained variance [%]': float(100 * variance[1]),
+            })
+
+    return coordinate_rows, loading_rows, explained_variance
+
+
+def plot_family_structural_pca(coordinate_rows, explained_variance, family_colors, figure_path=None):
+    """Show family colours on independent HS/LS structural PCA projections."""
+    fig, axs = plt.subplots(1, 2, figsize=(10.4, 4.0))
+    for ax, state in zip(axs, ['HS', 'LS']):
+        state_rows = [row for row in coordinate_rows if row['Spin State'] == state]
+        for family, color in family_colors.items():
+            selected = [row for row in state_rows if row['Family Label'] == family]
+            if not selected:
+                continue
+            ax.scatter(
+                [row['PC1'] for row in selected],
+                [row['PC2'] for row in selected],
+                s=36, color=color, edgecolor='black', linewidth=0.35, alpha=0.8,
+                label=family if state == 'HS' else None,
+            )
+        variance = explained_variance[state]
+        ax.set_title(f'{state} minima', fontsize=12)
+        ax.set_xlabel(f'PC1 ({100 * variance[0]:.1f}%)', fontsize=11)
+        ax.set_ylabel(f'PC2 ({100 * variance[1]:.1f}%)', fontsize=11)
+        ax.set_aspect('equal', adjustable='datalim')
+        ax.tick_params(direction='out', labelsize=10)
+        ax.margins(0.10)
+        ax.grid(alpha=0.18)
+        for spine in ax.spines.values():
+            spine.set_color('black')
+            spine.set_linewidth(1.0)
+
+    handles, labels = axs[0].get_legend_handles_labels()
+    legend_columns = 1
+    if labels and all(' \u2014 ' in label for label in labels):
+        # Separate columns align the grid identifiers despite different motif lengths.
+        motifs, positions = zip(*(label.split(' \u2014 ', 1) for label in labels))
+        handles += [plt.Line2D([], [], linestyle='none') for label in labels]
+        labels = list(motifs) + list(positions)
+        legend_columns = 2
+    fig.legend(handles, labels, loc='center left', bbox_to_anchor=(0.82, 0.5),
+               frameon=False, fontsize=10, title='Ligand Family',
+               title_fontproperties={'weight': 'bold', 'size': 10},
+               ncols=legend_columns, columnspacing=0.6)
+    fig.subplots_adjust(left=0.075, right=0.81, bottom=0.17, top=0.88, wspace=0.35)
+    if figure_path:
+        fig.savefig(figure_path, dpi=400, bbox_inches='tight', facecolor='white')
+    return fig, axs
+
 
 ######################
 #### Ligand Split ####
@@ -1327,11 +1659,24 @@ def display_svg_mol(mol, legend=None):
     svg = Draw.MolsToGridImage([mol], molsPerRow=1, subImgSize=(520, 360), legends=[legend], useSVG=True)
     display(SVG(svg.data if hasattr(svg, 'data') else str(svg)))
 
-def color_atom_labels(svg_text, atom_indices, color='#D62728'):
-    for atom_idx in atom_indices:
-        pattern = rf'(<path class="atom-{int(atom_idx)}"[^>]*fill=")#[0-9A-Fa-f]{{6,8}}'
-        svg_text = re.sub(pattern, rf'\1{color}', svg_text)
-    return svg_text
+def color_atom_labels(svg_text, atom_indices, color='#D62728', bold=False):
+    """Style atom-label paths without changing bonds or atom highlights."""
+    ET.register_namespace('', 'http://www.w3.org/2000/svg')
+    root = ET.fromstring(svg_text)
+    atom_classes = {f'atom-{int(idx)}' for idx in atom_indices}
+    for element in root.iter():
+        if element.tag.rsplit('}', 1)[-1] != 'path' or element.get('class') not in atom_classes:
+            continue
+        element.set('fill', color)
+        style = element.get('style', '').rstrip(';') + f';fill:{color}'
+        if bold:
+            # RDKit draws letters as outlines; a matching stroke thickens the glyph.
+            element.set('stroke', color)
+            element.set('stroke-width', '1.2')
+            element.set('stroke-linejoin', 'round')
+            style += f';stroke:{color};stroke-width:1.2;stroke-linejoin:round'
+        element.set('style', style.lstrip(';'))
+    return ET.tostring(root, encoding='unicode')
 
 def display_svg_mol_extra(record, size=(620, 420)):
     highlight_atoms = sorted(set(record['core_atoms']) | set(record['subs_atoms']))

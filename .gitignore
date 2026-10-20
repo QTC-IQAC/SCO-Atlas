@@ -5,6 +5,8 @@ __pycache__/
 Data/
 Database_95SCO_Kulik
 Analysis/*/Figures/*
+!Analysis/*/Figures/Tables/
+!Analysis/*/Figures/Tables/*.tex
 !Analysis/*/Figures/HTML/
 !Analysis/*/Figures/HTML/*.html
 !Analysis/*/Figures/HTML/*.csv

@@ -1,16 +1,16 @@
 # SCO ATLAS Analysis 
 
-## Layer 1: TMC_Thermodynamics
+This repository contains reproducible analyses built on the SCO ATLAS, 
+a chemically aware data infrastructure represented and navigated with SCOPE. 
+The underlying data objects and calculations are archived on Zenodo, 
+while this repository contains the notebooks, derived outputs and 
+interactive resources used to interrogate these data.
 
-This repository contains the analysis notebooks, derived outputs, figures,
-and manuscript associated with the **SCO ATLAS**. The ATLAS is a collection of
-experimentally grounded Fe(II)N6 transition-metal complexes represented and
-analysed with SCOPE.
+The first analysis layer accompanies *Mapping How Ligands Shape Spin-State
+Thermodynamics in Fe(II)N₆ Complexes: Insights from the SCO ATLAS*.
 
-The ATLAS itself, including systems, and computation files, is stored separately. 
-
-The manuscript accompanying the present release analyses the `isolated` branch,
-which contains gas-phase HS and LS calculations. 
+The ATLAS data itself, including the SCOPE System objects and computation files,
+is archived on Zenodo at [https://doi.org/10.5281/zenodo.23083798](https://doi.org/10.5281/zenodo.23083798).
 
 ## Repository Structure
 
@@ -53,14 +53,14 @@ Each file under `Data/2-Systems/<system>/` links the corresponding sources,
 branches, workflows, calculations, and derived results. These serialized System
 objects are the principal entry points for navigating the ATLAS with SCOPE.
 
-Instructions for exporting the shared data and computation branches as separate
-archives are provided in `ATLAS/README.md`.
+Instructions for extracting, verifying, and configuring the archived data are
+provided in the README distributed with the Zenodo record.
 
 ## Requirements
 
 - Python 3.12.
 - SCOPE 0.9.6, including the core and SCO packages importable as `scope` and `scope_sco`.
-- The complete ATLAS
+- The complete [SCO ATLAS data archive](https://doi.org/10.5281/zenodo.23083798).
 
 If you're unsure, you can check the installed SCOPE version with:
 

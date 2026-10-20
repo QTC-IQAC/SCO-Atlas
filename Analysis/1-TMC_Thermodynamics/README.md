@@ -1,15 +1,20 @@
 # 1 - TMC Thermodynamics
 
 This analysis describes the gas-phase thermodynamics of the SCO
-ATLAS and supports the accompanying manuscript. It reads SCOPE `System` objects
-from the external ATLAS data, and executes the analyses discussed in the manuscript
+ATLAS and supports the manuscript *Mapping How Ligands Shape Spin-State
+Thermodynamics in Fe(II)N₆ Complexes: Insights from the SCO ATLAS*. It reads SCOPE `System` objects
+from the external ATLAS data, and executes the analyses discussed in the manuscript.
+The corresponding data archive is available on Zenodo at
+[https://doi.org/10.5281/zenodo.23083798](https://doi.org/10.5281/zenodo.23083798).
 
 ## Requirements
 
 The notebooks require:
 
 - a Python environment containing SCOPE 0.9.6, including the `scope` and `scope_sco` packages;
-- the complete SCO ATLAS `Data` directory, including `1-Sources/`, `2-Systems/`, and `3-Computations/`; and
+- the complete SCO ATLAS `Data` directory from the
+  [Zenodo archive](https://doi.org/10.5281/zenodo.23083798), including
+  `1-Sources/`, `2-Systems/`, and `3-Computations/`; and
 - a local `scope_env_atlas.npy` environment generated as described in the ATLAS `README.md`.
 
 The released notebooks target SCOPE 0.9.6. The repository version may be
@@ -31,8 +36,11 @@ figures_path  = "/path/to/SCO-Atlas/Analysis/1-TMC_Thermodynamics/Figures/"
 - `Notebooks/`: production and diagnostic notebooks.
 - `Notebooks/local_functions.py`: helper functions developed specifically for
   this analysis layer. They support the notebooks but are not part of SCOPE
-- `Outputs/`: output CSV and LaTeX tables used by the analysis and manuscript.
+- `Outputs/`: output CSV data used by the analysis and manuscript.
 - `Figures/`: folder to hosts generated PNG/PDF figures locally by the user.
+- `Figures/Tables/`: generated LaTeX tables, read by the manuscript through
+  `figures/Tables/`. Table files remain available when figure saving is disabled
+  and are included in the repository.
 - `Figures/HTML/`: hosts interactive ligand maps and their CSV data tables.
 - `Bibliography/`: Crossref/OpenAlex utilities and journal-name resources.
 
