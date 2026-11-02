@@ -1,103 +1,43 @@
-# SCO ATLAS Notes
+# SCO ATLAS Publication Repository
 
-## Project Identity
+## Identity and boundaries
 
-- Project name: `SCO ATLAS`.
-- Repository root: `/Users/sergivela/Documents/SCOPE/Sub-Projects/1-ATLAS`.
-- External data root: `/Users/sergivela/Documents/SCOPE/ATLAS/Data`.
-- Purpose: construct, document, and analyse a chemically aware dataset of
-  Fe(II)N6 spin-crossover complexes.
-- The current manuscript analyses the gas-phase `isolated` branch. Periodic
-  `solid` computations belong to a later analysis layer.
+- Repository root: `/Users/sergivela/Documents/SCOPE/ATLAS/Analyses`.
+- Remote: `https://github.com/QTC-IQAC/SCO-Atlas.git`.
+- Purpose: curate reproducible, publication-worthy ATLAS analyses under
+  `<analysis>/`.
+- Development projects live separately under
+  `/Users/sergivela/Documents/SCOPE/Sub-Projects/`, with independent private
+  version tracking. Do not turn this public checkout into a mirror of them.
+- The parent ATLAS store and its `Data/` directory are not part of this Git
+  repository. Read the store's guidance before accessing its data.
 
-## Relationship to SCOPE
+Read `/Users/sergivela/Documents/SCOPE/Docs/agent_guidance.md` and applicable
+analysis-specific guidance. Default to the local SCOPE development checkout
+unless the user specifies a version-pinned task; published layers document the
+software versions needed to reproduce their original results.
 
-- SCOPE source repository: `/Users/sergivela/Documents/SCOPE/Program/Scope`.
-- The analysis notebooks target SCOPE 0.9.6 and require both `scope` and
-  `scope_sco`.
-- Most production calculations were orchestrated with earlier frozen SCOPE
-  releases; do not rewrite or regenerate them unless explicitly requested.
-- Prefer analysis changes in this repository. Changes to SCOPE should be made
-  only when the task explicitly concerns a reusable SCOPE bug or feature.
+## Publication workflow
 
-## Repository Structure
+Select the necessary code, notebooks, portable configuration, documentation and
+final derived results from the private source project. Record its source
+revision and software/data dependencies. Copy only that reviewed selection to
+the appropriate analysis directory and inspect the diff and ignore rules.
+Validate the exported workflow independently of private machine paths before
+publication. Do not copy private `.git` metadata or merge private histories
+into this repository. See `docs/publication_workflow.md`.
 
-- Current analysis layer: `Analysis/1-TMC_Thermodynamics/`.
-- Analysis notebooks: `Analysis/1-TMC_Thermodynamics/Notebooks/`.
-- Layer-specific notebook helpers: `Analysis/1-TMC_Thermodynamics/Notebooks/local_functions.py`.
-- Derived tables and CSV files: `Analysis/1-TMC_Thermodynamics/Outputs/`.
-- Bibliographic tools and journal data: `Analysis/1-TMC_Thermodynamics/Bibliography/`.
-- Local figures: `Analysis/1-TMC_Thermodynamics/Figures/`.
-- Versioned interactive maps: `Analysis/1-TMC_Thermodynamics/Figures/HTML/`.
-- Scientific and development notes: `Notes/`.
-- Main manuscript and ESI: `Manuscript/main.tex` and `Manuscript/esi.tex`.
-- LaTeX PDFs: `Manuscript/build/main.pdf` and `Manuscript/build/esi.pdf`.
+## Existing first analysis
 
-The standard analysis sequence is:
+`1-TMC_Thermodynamics/` contains the first gas-phase study. Its
+development source remains in `Sub-Projects/1-ATLAS`, whose existing Git setup
+is unchanged pending a separate migration. Its published notebook sequence is
+numbered 0 through 6, with focused `D-` diagnostics and existing helpers in
+`Notebooks/local_functions.py`. Preserve its established layout. Its original
+release targets SCOPE 0.9.6 with both `scope` and `scope_sco`. Do not execute
+expensive workflows or regenerate outputs without task scope.
 
-```text
-0-Prepare_Systems.ipynb
-1-Crystal_Breakdown.ipynb
-2-Bibliographic_Data.ipynb
-3-Thermodynamics.ipynb
-4-Ligand_Composition.ipynb
-5-Structural_Correlations.ipynb
-6-VNM_Analysis.ipynb
-```
-
-Files beginning with `D-` are focused diagnostic notebooks and are not required
-for the production sequence. Local exploratory notebooks beginning with `X-`
-are ignored by Git; inspect them before executing cells because some analyses
-are computationally expensive.
-
-## External Data Structure
-
-The large ATLAS data are deliberately kept outside the Git repository:
-
-```text
-/Users/sergivela/Documents/SCOPE/ATLAS/Data/
-├── 1-Sources/
-├── 2-Systems/
-├── 3-Computations/
-│   └── <system>/
-│       ├── isolated/
-│       └── solid/
-├── scope_env_atlas.npy
-├── *.scope
-└── *.py
-```
-
-System indexes in `Analysis/1-TMC_Thermodynamics/Outputs/` store paths relative to the external
-`Data/` directory, for example `2-Systems/ABITEM/ABITEM.npy`. Notebooks load the
-serialized environment and call `system.set_paths_from_environment(env)` to
-restore local source and computation paths.
-
-The data-store release and branch-compression instructions live in
-`/Users/sergivela/Documents/SCOPE/ATLAS/README.md`.
-
-## Working Conventions
-
-- Preserve the numbered, readable notebook workflow. Put reusable or complex
-  layer-specific helpers in `local_functions.py`, but keep short analysis loops visible in the
-  notebooks.
-- Avoid pandas and `pathlib.Path` in the analysis notebooks unless a task
-  specifically requires them; prefer `csv`, ordinary dictionaries, and string
-  paths.
-- Do not execute long-running notebooks or regenerate expensive data unless the
-  user explicitly asks for it.
-- Do not overwrite raw `Sources`, `Systems`, or `Computations` while performing
-  analysis.
-- Preserve six-letter refcodes in analysis tables while retaining physical file
-  paths containing derived suffixes such as `01` or `02`.
-- Treat serialized SCOPE objects as trusted-data-only files.
-
-## Manuscript
-
-- Build the ESI before the main manuscript with `make -C Manuscript`.
-- Figures are read through `Manuscript/figures`, a link to
-  `Analysis/1-TMC_Thermodynamics/Figures/`.
-- Do not edit prose unless requested. When discussing manuscript changes, propose
-  LaTeX text in chat unless the user explicitly asks for direct modification.
-- Keep gas-phase molecular results distinct from experimental crystal or
-  solution observables. The computed molecular crossing temperature is an
-  analogue of experimental `T1/2`, not a direct prediction of it.
+Preserve six-letter refcodes and physical paths with derived suffixes. Keep
+gas-phase molecular crossing temperatures, periodic results and experimental
+observables distinct. Never overwrite raw ATLAS sources, computations, Systems
+or published data releases while preparing an analysis publication.

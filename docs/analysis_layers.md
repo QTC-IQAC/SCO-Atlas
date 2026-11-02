@@ -5,7 +5,7 @@ Each layer has a descriptive numbered name and owns its notebooks, derived
 outputs, figures, and any analysis-specific support files.
 
 ```text
-Analysis/
+SCO-Atlas/
 └── 1-TMC_Thermodynamics/
     ├── Bibliography/
     ├── Notebooks/

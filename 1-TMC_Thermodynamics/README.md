@@ -27,8 +27,8 @@ paths to the local installation before running the workflow:
 ```python
 data_path     = "/path/to/ATLAS/Data/"
 env_path      = "/path/to/ATLAS/Data/scope_env_atlas.npy"
-analysis_path = "/path/to/SCO-Atlas/Analysis/1-TMC_Thermodynamics/"
-figures_path  = "/path/to/SCO-Atlas/Analysis/1-TMC_Thermodynamics/Figures/"
+analysis_path = "/path/to/SCO-Atlas/1-TMC_Thermodynamics/"
+figures_path  = "/path/to/SCO-Atlas/1-TMC_Thermodynamics/Figures/"
 ```
 
 ## Contents
