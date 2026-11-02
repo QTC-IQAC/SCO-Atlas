@@ -1,23 +1,21 @@
-# Analysis Layers
+# Study contents
 
-The SCO ATLAS analyses are organized as chronological, self-contained layers.
-Each layer has a descriptive numbered name and owns its notebooks, derived
-outputs, figures, and any analysis-specific support files.
+The repository presents each study in a numbered directory containing its
+analysis notebooks, derived results, figures and supporting resources.
+Requirements and methods are documented in each study's README.
 
-```text
-SCO-Atlas/
-└── 1-TMC_Thermodynamics/
-    ├── Bibliography/
-    ├── Notebooks/
-    ├── Outputs/
-    └── Figures/
-        └── HTML/
-```
+## Gas-phase thermodynamics
 
-Future analyses should be added as sibling directories, for example
-`2-<Analysis_Name>/`, rather than mixed into the existing layer. Shared code can
-be introduced later if two or more layers genuinely require it.
+`1-TMC_Thermodynamics/` accompanies *Mapping How Ligands Shape Spin-State
+Thermodynamics in Fe(II)N₆ Complexes: Insights from the SCO ATLAS*.
 
-Static figures are reproducible notebook products and remain untracked. HTML
-maps and their associated CSV tables are versioned under each layer's
-`Figures/HTML/` directory because they are direct interactive research outputs.
+- `Outputs/` contains derived tables supporting the reported results.
+- `Figures/HTML/` contains interactive ligand-family maps and their CSV data.
+- `Figures/Tables/` contains LaTeX result tables.
+- `Notebooks/` contains the numbered analysis sequence, supporting functions
+  and focused diagnostic notebooks. Static figures are generated from these
+  analyses.
+- `Bibliography/` contains bibliographic utilities and journal-name resources.
+
+See the [study README](../1-TMC_Thermodynamics/README.md) for the relationship
+between the notebooks and the manuscript's sections.
